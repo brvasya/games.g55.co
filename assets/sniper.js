@@ -1,4 +1,4 @@
-export const SNIPER_RIFLE = {
+export const SNIPER = {
 name: "Sniper Rifle",
 view: {
 posOffset: [3, -3, -8],
@@ -22,6 +22,6 @@ idle: [0, 0],
 shoot: [0, 27],
 reload: [30, 275]
 },
-model: "./assets/weapon/bo2/c_bo2_xpr50.glb",
-fireSound: "./assets/weapon/bo2/c_bo2_xpr50.ogg"
+model: "./assets/sniper.glb",
+fireSound: "./assets/sniper.ogg"
 };

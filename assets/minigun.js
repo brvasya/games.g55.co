@@ -1,4 +1,4 @@
-export const MACHINE_GUN = {
+export const MINIGUN = {
 name: "Minigun",
 view: {
 posOffset: [0, -1, 1],
@@ -21,6 +21,6 @@ idle: [0, 0],
 shoot: [0, 7],
 reload: [10, 260]
 },
-model: "./assets/weapon/bo2/c_bo2_deathmachine1.glb",
-fireSound: "./assets/weapon/bo2/c_bo2_deathmachine1.ogg"
+model: "./assets/minigun.glb",
+fireSound: "./assets/minigun.ogg"
 };

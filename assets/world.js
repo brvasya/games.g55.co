@@ -1,7 +1,7 @@
 export const WORLD = {
 map: {
 scale: [1.35, 1.35, 1.35],
-model: "./assets/world/gm_office_cso2.glb"
+model: "./assets/world.glb"
 },
 sky: {
 skyColorTop: 0x6fb8ff,

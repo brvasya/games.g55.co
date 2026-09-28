@@ -6,7 +6,7 @@ rotOffset: [0, -Math.PI, 0],
 scl: [1, 1, 1]
 },
 behavior: {
-magazineSize: 10,
+magazineSize: 20,
 damage: 25,
 fireCooldownMs: 200,
 reloadSpeed: 3,
@@ -18,9 +18,9 @@ boneName: "j_bolt",
 },
 anim: {
 idle: [0, 0],
-shoot: [0, 25],
-reload: [30, 130]
+shoot: [0, 17],
+reload: [20, 145]
 },
-model: "./assets/weapon/bo2/c_bo2_tac45.glb",
-fireSound: "./assets/weapon/bo2/c_bo2_tac45.ogg"
+model: "./assets/pistol.glb",
+fireSound: "./assets/pistol.ogg"
 };

@@ -1,4 +1,4 @@
-export const ASSAULT_RIFLE = {
+export const RIFLE = {
 name: "Assault Rifle",
 view: {
 posOffset: [0, -1, 2],
@@ -21,6 +21,6 @@ idle: [0, 0],
 shoot: [0, 15],
 reload: [20, 230]
 },
-model: "./assets/weapon/bo2/c_bo2_an94.glb",
-fireSound: "./assets/weapon/bo2/c_bo2_an94.ogg"
+model: "./assets/rifle.glb",
+fireSound: "./assets/rifle.ogg"
 };

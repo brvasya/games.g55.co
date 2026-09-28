@@ -1,7 +1,7 @@
 export const SHOTGUN = {
 name: "Shotgun",
 view: {
-posOffset: [0, 0, 0],
+posOffset: [0, -1, 2],
 rotOffset: [0, -Math.PI, 0],
 scl: [1, 1, 1]
 },
@@ -9,18 +9,18 @@ behavior: {
 magazineSize: 1,
 damage: 25,
 fireCooldownMs: 120,
-reloadSpeed: 1,
+reloadSpeed: 2,
 pellets: 6,
 spread: 0.1,
 },
 shellEject: {
-boneName: "Bone48",
+boneName: "tag_weapon",
 },
 anim: {
 idle: [0, 0],
-shoot: [5, 15],
-reload: [16, 42]
+shoot: [0, 20],
+reload: [25, 70]
 },
-model: "./assets/weapon/cscz/v_m3.glb",
-fireSound: "./assets/weapon/cscz/v_m3.ogg"
+model: "./assets/shotgun.glb",
+fireSound: "./assets/shotgun.ogg"
 };
