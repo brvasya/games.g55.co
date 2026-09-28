@@ -15,7 +15,7 @@ import { MACHINE_GUN } from "./assets/weapon/bo2/c_bo2_deathmachine1.js";
 import { HUGGY_FN } from "./assets/enemies/huggy_fn.js";
 
 export const GAME_CONFIG = {
-gameTitle: "Poppy Strike 6",
+gameTitle: "G55Game",
 
 wave: {
 baseEnemies: 6,
