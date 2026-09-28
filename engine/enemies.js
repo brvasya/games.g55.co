@@ -276,6 +276,8 @@ export function createEnemies({
       attackTimer: 0,
       attackElapsed: 0,
       pendingDamage: false,
+      isHitReacting: false,
+      hitTimer: 0,
       model: null,
       groundY: y,
       verticalVelocity: 0,
@@ -305,10 +307,10 @@ export function createEnemies({
     model.scale.set(assetScale[0], assetScale[1], assetScale[2]);
 
     const assetRotation = type.asset.rotation || [0, 0, 0];
-    const assetPosition = type.asset.position || [0, 0, 0];
+    const assetPositionY = Number(type.asset.positionY) || 0;
 
     model.rotation.set(assetRotation[0], assetRotation[1], assetRotation[2]);
-    model.position.set(assetPosition[0], assetPosition[1], assetPosition[2]);
+    model.position.y += assetPositionY;
 
     model.traverse(object => {
       if (!object.isMesh || !object.material) return;
@@ -332,33 +334,170 @@ export function createEnemies({
     }
   }
 
+  function makeClipInPlace(clip, model) {
+    const inPlaceClip = clip.clone();
+    const nodeDepthByName = new Map();
+
+    model.traverse(object => {
+      if (!object.name) return;
+
+      let depth = 0;
+      let parent = object.parent;
+
+      while (parent && parent !== model) {
+        depth++;
+        parent = parent.parent;
+      }
+
+      const key = object.name.trim().toLowerCase();
+      const currentDepth = nodeDepthByName.get(key);
+
+      if (currentDepth === undefined || depth < currentDepth) {
+        nodeDepthByName.set(key, depth);
+      }
+    });
+
+    const candidates = inPlaceClip.tracks
+      .filter(track => track.name.toLowerCase().endsWith(".position"))
+      .map(track => {
+        const valueSize = track.getValueSize();
+        const values = track.values;
+
+        if (valueSize < 3 || values.length < valueSize) return null;
+
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+
+        for (let i = 0; i < values.length; i += valueSize) {
+          minX = Math.min(minX, values[i]);
+          maxX = Math.max(maxX, values[i]);
+          minZ = Math.min(minZ, values[i + 2]);
+          maxZ = Math.max(maxZ, values[i + 2]);
+        }
+
+        const horizontalMotion = Math.hypot(maxX - minX, maxZ - minZ);
+        if (horizontalMotion <= 0.00001) return null;
+
+        const targetPath = track.name.slice(0, -".position".length);
+        const bonesMatch = targetPath.match(/bones\[([^\]]+)\]$/i);
+        const targetName = (bonesMatch ? bonesMatch[1] : targetPath.split(/[/.]/).pop() || "")
+          .trim()
+          .toLowerCase();
+
+        return {
+          track,
+          valueSize,
+          targetName,
+          depth: nodeDepthByName.get(targetName) ?? Number.MAX_SAFE_INTEGER,
+          likelyRoot: /(root|hips|pelvis|armature)/i.test(targetName),
+          horizontalMotion
+        };
+      })
+      .filter(Boolean);
+
+    if (!candidates.length) return inPlaceClip;
+
+    candidates.sort((a, b) => {
+      if (a.likelyRoot !== b.likelyRoot) return a.likelyRoot ? -1 : 1;
+      if (a.depth !== b.depth) return a.depth - b.depth;
+      return b.horizontalMotion - a.horizontalMotion;
+    });
+
+    const rootTrack = candidates[0];
+    const values = rootTrack.track.values;
+    const startX = values[0];
+    const startZ = values[2];
+
+    for (let i = 0; i < values.length; i += rootTrack.valueSize) {
+      values[i] = startX;
+      values[i + 2] = startZ;
+    }
+
+    return inPlaceClip;
+  }
+
   function setupEnemyAnimations(enemy, model, animations) {
     const mixer = new THREE.AnimationMixer(model);
     const assetAnim = enemy.userData.type.asset.anim || {};
-    const baseClip = animations[0];
 
     enemy.userData.mixer = mixer;
     enemy.userData.actions = {};
+    enemy.userData.attackActions = [];
+    enemy.userData.hitActions = [];
+    enemy.userData.selectedAnimationClips = {};
 
-    Object.entries(assetAnim).forEach(([name, data]) => {
-      const loop = Array.isArray(data) && data[2] === true;
-      let clip = findAnimationClip(animations, name);
-
-      if (!clip && baseClip && Array.isArray(data)) {
-        const fps = 30;
-        clip = THREE.AnimationUtils.subclip(baseClip, name, data[0], data[1], fps);
-      }
-
-      if (!clip) {
-        console.warn(`Missing enemy animation clip: ${name}`);
+    Object.entries(assetAnim).forEach(([name, clipNames]) => {
+      if (!Array.isArray(clipNames)) {
+        console.warn(`Enemy animation action must be a clip-name array: ${name}`);
         return;
       }
 
-      const action = mixer.clipAction(clip);
+      // Empty arrays are allowed for optional actions such as hit reactions.
+      if (clipNames.length === 0) return;
 
-      if (name === "attack") {
-        enemy.userData.attackDuration = clip.duration;
+      const validClipNames = clipNames
+        .filter(clipName => typeof clipName === "string" && clipName.trim())
+        .map(clipName => clipName.trim());
+
+      if (!validClipNames.length) {
+        console.warn(`Enemy animation action has no valid clip names: ${name}`);
+        return;
       }
+
+      const availableClips = validClipNames
+        .map(clipName => {
+          const clip = findAnimationClip(animations, clipName);
+
+          if (!clip) {
+            console.warn(`Missing enemy animation clip: ${clipName}`);
+            return null;
+          }
+
+          return clip;
+        })
+        .filter(Boolean);
+
+      if (!availableClips.length) {
+        console.warn(`No configured enemy animation clips were found for action: ${name}`);
+        return;
+      }
+
+      // Attack and hit reactions keep every configured clip ready. A fresh
+      // random action is chosen each time that state starts.
+      if (name === "attack" || name === "hit") {
+        const randomActions = availableClips.map(clip => {
+          // Attacks use the same in-place treatment as walking so root-motion
+          // X/Z translation cannot move the visual model independently of the
+          // enemy group. Hit reactions keep their original motion.
+          const actionClip = name === "attack"
+            ? makeClipInPlace(clip, model)
+            : clip;
+
+          const action = mixer.clipAction(actionClip);
+          action.setLoop(THREE.LoopOnce, 1);
+          action.clampWhenFinished = true;
+          return action;
+        });
+
+        if (name === "attack") {
+          enemy.userData.attackActions = randomActions;
+        } else {
+          enemy.userData.hitActions = randomActions;
+        }
+        return;
+      }
+
+      let clip = availableClips[Math.floor(Math.random() * availableClips.length)];
+      enemy.userData.selectedAnimationClips[name] = clip.name;
+
+      if (name === "walk") {
+        clip = makeClipInPlace(clip, model);
+      }
+
+      const action = mixer.clipAction(clip);
+      const loop = name === "walk";
 
       action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
       action.clampWhenFinished = !loop;
@@ -376,17 +515,64 @@ export function createEnemies({
     }) || null;
   }
 
-  function playEnemyAnimation(enemy, name) {
+  function playEnemyAnimation(enemy, name, restart = false) {
     const action = enemy.userData.actions[name];
-    if (!action) return;
-    if (enemy.userData.currentAction === action) return;
+    if (!action) return false;
+    if (enemy.userData.currentAction === action && !restart) return true;
 
-    if (enemy.userData.currentAction) {
+    if (enemy.userData.currentAction && enemy.userData.currentAction !== action) {
       enemy.userData.currentAction.fadeOut(0.08);
     }
 
     action.reset().fadeIn(0.08).play();
     enemy.userData.currentAction = action;
+    return true;
+  }
+
+  function playEnemyAttack(enemy) {
+    const attackActions = enemy.userData.attackActions || [];
+    if (!attackActions.length) return 0;
+
+    // Pick again for every attack so one enemy can use every configured attack
+    // clip over its lifetime.
+    const attackAction = attackActions[Math.floor(Math.random() * attackActions.length)];
+
+    if (enemy.userData.currentAction && enemy.userData.currentAction !== attackAction) {
+      enemy.userData.currentAction.fadeOut(0.08);
+    }
+
+    attackAction.reset().fadeIn(0.08).play();
+    enemy.userData.currentAction = attackAction;
+    enemy.userData.attackDuration = attackAction.getClip().duration;
+
+    return enemy.userData.attackDuration;
+  }
+
+  function playEnemyHitReaction(enemy) {
+    const hitActions = enemy.userData.hitActions || [];
+    if (!hitActions.length) return false;
+
+    // Pick again on every hit, so one enemy can alternate between all configured
+    // hit reaction clips over its lifetime.
+    const hitAction = hitActions[Math.floor(Math.random() * hitActions.length)];
+
+    // A hit interrupts the current attack so damage cannot land after the enemy
+    // has already been staggered by the player.
+    enemy.userData.isAttacking = false;
+    enemy.userData.pendingDamage = false;
+    enemy.userData.attackTimer = 0;
+    enemy.userData.attackElapsed = 0;
+
+    if (enemy.userData.currentAction && enemy.userData.currentAction !== hitAction) {
+      enemy.userData.currentAction.fadeOut(0.08);
+    }
+
+    hitAction.reset().fadeIn(0.08).play();
+    enemy.userData.currentAction = hitAction;
+    enemy.userData.isHitReacting = true;
+    enemy.userData.hitTimer = hitAction.getClip().duration;
+
+    return true;
   }
 
   function update(delta, isPlaying, takeDamage) {
@@ -408,14 +594,30 @@ export function createEnemies({
         return;
       }
 
-      if (enemy.userData.attackTimer > 0) {
-        enemy.userData.attackTimer = Math.max(0, enemy.userData.attackTimer - delta);
-        enemy.userData.attackElapsed += delta;
+      if (enemy.userData.isHitReacting) {
+        enemy.userData.hitTimer = Math.max(0, enemy.userData.hitTimer - delta);
 
-        if (enemy.userData.attackTimer === 0) {
-          enemy.userData.isAttacking = false;
+        toPlayer.set(
+          playerPosition.x - enemy.position.x,
+          0,
+          playerPosition.z - enemy.position.z
+        );
+
+        if (toPlayer.lengthSq() > 0.0001) {
+          enemy.lookAt(playerPosition.x, enemy.position.y, playerPosition.z);
+        }
+
+        if (enemy.userData.hitTimer <= 0) {
+          enemy.userData.isHitReacting = false;
           playEnemyAnimation(enemy, "walk");
         }
+
+        return;
+      }
+
+      if (enemy.userData.isAttacking) {
+        enemy.userData.attackTimer = Math.max(0, enemy.userData.attackTimer - delta);
+        enemy.userData.attackElapsed += delta;
       }
 
       toPlayer.set(
@@ -440,10 +642,14 @@ export function createEnemies({
       } else if (nowTime - enemy.userData.lastAttack > config.enemyAttackCooldown && !enemy.userData.isAttacking) {
         enemy.userData.lastAttack = nowTime;
         enemy.userData.isAttacking = true;
-        enemy.userData.attackTimer = enemy.userData.attackDuration;
         enemy.userData.attackElapsed = 0;
         enemy.userData.pendingDamage = true;
-        playEnemyAnimation(enemy, "attack");
+
+        const attackDuration = playEnemyAttack(enemy);
+        enemy.userData.attackTimer = Math.max(
+          attackDuration || 0,
+          enemy.userData.attackDamageDelay || 0
+        );
 
         if (enemy.userData.type.asset.attackSound) {
           playAssetSound(enemy.userData.type.asset.attackSound, 1.0);
@@ -462,6 +668,12 @@ export function createEnemies({
         if (currentDistance <= enemy.userData.attackDistance) {
           takeDamage(enemy.userData.damage);
         }
+      }
+
+      if (enemy.userData.isAttacking && enemy.userData.attackTimer <= 0) {
+        enemy.userData.isAttacking = false;
+        enemy.userData.pendingDamage = false;
+        playEnemyAnimation(enemy, "walk");
       }
     });
   }
@@ -592,10 +804,13 @@ export function createEnemies({
     if (enemy.userData.isDying) return false;
 
     enemy.userData.health -= damage;
-    flashEnemy(enemy);
 
     if (enemy.userData.health <= 0) {
       enemy.userData.isDying = true;
+      enemy.userData.isHitReacting = false;
+      enemy.userData.hitTimer = 0;
+      enemy.userData.isAttacking = false;
+      enemy.userData.pendingDamage = false;
 
       if (enemy.userData.currentAction) {
         enemy.userData.currentAction.fadeOut(0.05);
@@ -614,6 +829,7 @@ export function createEnemies({
         deathAction.clampWhenFinished = true;
         deathAction.setLoop(THREE.LoopOnce, 1);
         deathAction.play();
+        enemy.userData.currentAction = deathAction;
 
         enemy.userData.deathTimer = deathAction.getClip().duration;
       } else {
@@ -624,32 +840,8 @@ export function createEnemies({
       return true;
     }
 
+    playEnemyHitReaction(enemy);
     return false;
-  }
-
-  function flashEnemy(enemy) {
-    enemy.traverse(object => {
-      if (!object.material) return;
-
-      const materials = Array.isArray(object.material) ? object.material : [object.material];
-
-      materials.forEach(material => {
-        if (!material.color) return;
-
-        if (material.userData.hitFlashColor === undefined) {
-          material.userData.hitFlashColor = material.color.getHex();
-        }
-
-        material.color.setHex(0xff3333);
-
-        clearTimeout(material.userData.hitFlashTimer);
-        material.userData.hitFlashTimer = setTimeout(() => {
-          if (material.color && material.userData.hitFlashColor !== undefined) {
-            material.color.setHex(material.userData.hitFlashColor);
-          }
-        }, 90);
-      });
-    });
   }
 
   function findEnemyRoot(object) {

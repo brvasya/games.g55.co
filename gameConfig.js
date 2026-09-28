@@ -11,7 +11,7 @@ export const GAME_CONFIG = {
 gameTitle: "G55Game",
 
 wave: {
-baseEnemies: 6,
+baseEnemies: 16,
 enemiesPerWave: 3,
 maxEnemies: 20
 },
