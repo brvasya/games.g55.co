@@ -1,5 +1,4 @@
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { createGLTFLoader } from "./gltfLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVelocity, weaponSlots }) {
@@ -174,8 +173,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
     modelCache.set(key, cached);
 
-    const loader = new GLTFLoader();
-    loader.setMeshoptDecoder(MeshoptDecoder);
+    const loader = createGLTFLoader();
 
     cached.promise = new Promise(resolve => {
       loader.load(

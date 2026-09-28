@@ -1,5 +1,4 @@
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { createGLTFLoader } from "./gltfLoader.js";
 
 export function createWorld({ THREE, scene, worldConfig }) {
   const colliders = [];
@@ -45,8 +44,7 @@ export function createWorld({ THREE, scene, worldConfig }) {
 
   function loadMap() {
     return new Promise(resolve => {
-      const loader = new GLTFLoader();
-      loader.setMeshoptDecoder(MeshoptDecoder);
+      const loader = createGLTFLoader();
 
       loader.load(
         mapAsset.model,

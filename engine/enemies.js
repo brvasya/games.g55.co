@@ -1,5 +1,4 @@
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { createGLTFLoader } from "./gltfLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 export function createEnemies({
@@ -102,8 +101,7 @@ export function createEnemies({
 
     modelCache.set(src, cached);
 
-    const loader = new GLTFLoader();
-    loader.setMeshoptDecoder(MeshoptDecoder);
+    const loader = createGLTFLoader();
 
     cached.promise = new Promise(resolve => {
       loader.load(
@@ -199,8 +197,7 @@ export function createEnemies({
 
     animationCache.set(src, cached);
 
-    const loader = new GLTFLoader();
-    loader.setMeshoptDecoder(MeshoptDecoder);
+    const loader = createGLTFLoader();
 
     cached.promise = new Promise(resolve => {
       loader.load(
