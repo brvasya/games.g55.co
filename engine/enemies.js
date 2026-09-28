@@ -33,7 +33,29 @@ export function createEnemies({
   const terrainRayDirection = new THREE.Vector3(0, -1, 0);
 
   const modelCache = new Map();
+  const animationCache = new Map();
   const audioCache = new Map();
+
+  function getEnemyModelSources(asset) {
+    const configured = Array.isArray(asset?.models)
+      ? asset.models
+      : (typeof asset?.model === "string" ? [asset.model] : []);
+    const animationSrc = getEnemyAnimationSource(asset);
+
+    return [...new Set(
+      configured
+        .filter(src => typeof src === "string" && src.trim())
+        .map(src => src.trim())
+        // The shared animation GLB is never a visual enemy model.
+        .filter(src => src !== animationSrc)
+    )];
+  }
+
+  function getEnemyAnimationSource(asset) {
+    if (typeof asset?.animations !== "string") return null;
+    const src = asset.animations.trim();
+    return src || null;
+  }
 
   function preloadAll() {
     const tasks = [];
@@ -52,48 +74,54 @@ export function createEnemies({
 
   function preloadEnemyType(typeId) {
     const type = getEnemyType(typeId);
-    const asset = type.asset;
+    const asset = type?.asset;
+    if (!asset) return Promise.resolve(null);
 
-    if (!asset || !asset.model) return Promise.resolve(null);
+    const tasks = getEnemyModelSources(asset).map(preloadEnemyModel);
+    const animationSrc = getEnemyAnimationSource(asset);
 
-    let cached = modelCache.get(typeId);
+    if (animationSrc) {
+      tasks.push(preloadEnemyAnimationLibrary(animationSrc));
+    }
+
+    return tasks.length ? Promise.all(tasks) : Promise.resolve(null);
+  }
+
+  function preloadEnemyModel(src) {
+    let cached = modelCache.get(src);
 
     if (cached?.promise) return cached.promise;
     if (cached?.source || cached?.failed) return Promise.resolve(cached);
 
     cached = {
       source: null,
-      animations: [],
       loading: true,
       failed: false,
       promise: null
     };
 
-    modelCache.set(typeId, cached);
+    modelCache.set(src, cached);
 
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
 
     cached.promise = new Promise(resolve => {
       loader.load(
-        asset.model,
+        src,
         gltf => {
           cached.source = gltf.scene;
-          cached.animations = gltf.animations || [];
           cached.loading = false;
           cached.failed = false;
 
           cached.source.traverse(object => {
             if (!object.isMesh) return;
-
             object.castShadow = false;
             object.receiveShadow = false;
             object.frustumCulled = true;
-
           });
 
           enemies.forEach(enemy => {
-            if (enemy.userData.typeId === typeId && !enemy.userData.model) {
+            if (enemy.userData.modelSrc === src && !enemy.userData.model) {
               attachEnemyModel(enemy);
             }
           });
@@ -104,7 +132,104 @@ export function createEnemies({
         error => {
           cached.loading = false;
           cached.failed = true;
-          console.warn(`Enemy model failed to preload: ${typeId}`, error);
+          console.warn(`Enemy model failed to preload: ${src}`, error);
+          resolve(cached);
+        }
+      );
+    });
+
+    return cached.promise;
+  }
+
+  function discardAnimationLibraryScenes(gltf) {
+    // anim.glb is data-only at runtime. Keep AnimationClips, then immediately
+    // release any skeleton/mesh/material payload that happened to be exported
+    // with the animation library so it can never become a visible enemy.
+    const scenes = Array.isArray(gltf?.scenes) && gltf.scenes.length
+      ? gltf.scenes
+      : (gltf?.scene ? [gltf.scene] : []);
+
+    const disposedTextures = new Set();
+    const disposedMaterials = new Set();
+    const disposedGeometries = new Set();
+
+    const disposeMaterial = material => {
+      if (!material || disposedMaterials.has(material)) return;
+      disposedMaterials.add(material);
+
+      Object.values(material).forEach(value => {
+        if (!value || !value.isTexture || disposedTextures.has(value)) return;
+        disposedTextures.add(value);
+        value.dispose?.();
+      });
+
+      material.dispose?.();
+    };
+
+    scenes.forEach(animationScene => {
+      animationScene.traverse(object => {
+        if (object.geometry && !disposedGeometries.has(object.geometry)) {
+          disposedGeometries.add(object.geometry);
+          object.geometry.dispose?.();
+        }
+
+        if (Array.isArray(object.material)) {
+          object.material.forEach(disposeMaterial);
+        } else {
+          disposeMaterial(object.material);
+        }
+      });
+
+      animationScene.clear();
+    });
+  }
+
+  function preloadEnemyAnimationLibrary(src) {
+    let cached = animationCache.get(src);
+
+    if (cached?.promise) return cached.promise;
+    if (cached?.animations || cached?.failed) return Promise.resolve(cached);
+
+    cached = {
+      animations: null,
+      loading: true,
+      failed: false,
+      promise: null
+    };
+
+    animationCache.set(src, cached);
+
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+
+    cached.promise = new Promise(resolve => {
+      loader.load(
+        src,
+        gltf => {
+          // Keep clips only. No scene, skeleton, mesh, material, or texture from
+          // anim.glb is retained or attached to an enemy.
+          cached.animations = (gltf.animations || []).map(clip => clip.clone());
+          discardAnimationLibraryScenes(gltf);
+          cached.loading = false;
+          cached.failed = false;
+
+          if (!cached.animations.length) {
+            console.warn(`Enemy animation library contains no clips: ${src}`);
+          }
+
+          enemies.forEach(enemy => {
+            if (enemy.userData.animationSrc === src) {
+              setupEnemyAnimationsIfReady(enemy);
+            }
+          });
+
+          resolve(cached);
+        },
+        undefined,
+        error => {
+          cached.loading = false;
+          cached.failed = true;
+          console.warn(`Enemy animation library failed to preload: ${src}`, error);
           resolve(cached);
         }
       );
@@ -256,10 +381,17 @@ export function createEnemies({
     group.position.set(x, y, z);
 
     const asset = type.asset || {};
+    const modelSources = getEnemyModelSources(asset);
+    const modelSrc = modelSources.length
+      ? modelSources[Math.floor(Math.random() * modelSources.length)]
+      : null;
+    const animationSrc = getEnemyAnimationSource(asset);
 
     group.userData = {
       typeId: typeId,
       type,
+      modelSrc,
+      animationSrc,
       health: asset.enemyHealth,
       speed: asset.enemySpeed,
       damage: asset.enemyDamage,
@@ -283,6 +415,10 @@ export function createEnemies({
       navTargetAge: 0
     };
 
+    if (!modelSrc) {
+      console.warn(`Enemy type has no configured model: ${typeId}`);
+    }
+
     snapEnemyToTerrain(group, true);
 
     scene.add(group);
@@ -293,9 +429,30 @@ export function createEnemies({
     preloadEnemyType(typeId);
   }
 
+  function getEnemyAnimationClips(enemy) {
+    const animationSrc = enemy.userData.animationSrc;
+    if (!animationSrc) return [];
+
+    const cachedAnimations = animationCache.get(animationSrc);
+    return cachedAnimations?.animations || [];
+  }
+
+  function setupEnemyAnimationsIfReady(enemy) {
+    if (!enemy.userData.model || enemy.userData.mixer) return;
+
+    const animations = getEnemyAnimationClips(enemy);
+    if (!animations.length) return;
+
+    setupEnemyAnimations(enemy, enemy.userData.model, animations);
+
+    if (!enemy.userData.isAttacking && !enemy.userData.isHitReacting) {
+      playEnemyAnimation(enemy, "walk");
+    }
+  }
+
   function attachEnemyModel(enemy) {
     const type = enemy.userData.type;
-    const cached = modelCache.get(enemy.userData.typeId);
+    const cached = modelCache.get(enemy.userData.modelSrc);
 
     if (!cached || !cached.source || enemy.userData.model) return;
 
@@ -318,17 +475,13 @@ export function createEnemies({
       } else {
         object.material = object.material.clone();
       }
-
     });
 
     enemy.add(model);
     enemy.userData.model = model;
     enemy.updateMatrixWorld(true);
 
-    if (cached.animations.length) {
-      setupEnemyAnimations(enemy, model, cached.animations);
-      if (!enemy.userData.isAttacking) playEnemyAnimation(enemy, "walk");
-    }
+    setupEnemyAnimationsIfReady(enemy);
   }
 
   function findRootMotionTrack(clip, model) {
