@@ -1,6 +1,5 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { makeMaterialCrisp } from "./materials.js";
 
 export function createWorld({ THREE, scene, worldConfig }) {
   const colliders = [];
@@ -64,7 +63,6 @@ export function createWorld({ THREE, scene, worldConfig }) {
             object.receiveShadow = false;
             object.frustumCulled = true;
 
-            makeMaterialCrisp(THREE, object.material);
             colliders.push(object);
 
             if (isFloorMesh(object)) {

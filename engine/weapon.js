@@ -1,7 +1,6 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { makeMaterialCrisp } from "./materials.js";
 
 export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVelocity, weaponSlots }) {
   const slots = createSlots(weaponSlots);
@@ -192,7 +191,6 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
             object.frustumCulled = false;
             object.castShadow = false;
             object.receiveShadow = false;
-            makeMaterialCrisp(THREE, object.material);
           });
 
           resolve(cached);
@@ -470,7 +468,6 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
         object.material = object.material.clone();
       }
 
-      makeMaterialCrisp(THREE, object.material);
       registerFlashMaterial(object.material);
       [].concat(object.material).forEach(material => { material.alphaTest = 0.5; material.needsUpdate = true; });
     });

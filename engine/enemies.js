@@ -1,7 +1,6 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { makeMaterialCrisp } from "./materials.js";
 
 export function createEnemies({
   THREE,
@@ -91,7 +90,6 @@ export function createEnemies({
             object.receiveShadow = false;
             object.frustumCulled = true;
 
-            if (object.material) makeMaterialCrisp(THREE, object.material);
           });
 
           enemies.forEach(enemy => {
@@ -321,7 +319,6 @@ export function createEnemies({
         object.material = object.material.clone();
       }
 
-      makeMaterialCrisp(THREE, object.material);
     });
 
     enemy.add(model);
