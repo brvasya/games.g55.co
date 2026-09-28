@@ -334,8 +334,7 @@ export function createEnemies({
     }
   }
 
-  function makeClipInPlace(clip, model) {
-    const inPlaceClip = clip.clone();
+  function findRootMotionTrack(clip, model) {
     const nodeDepthByName = new Map();
 
     model.traverse(object => {
@@ -357,13 +356,13 @@ export function createEnemies({
       }
     });
 
-    const candidates = inPlaceClip.tracks
+    const candidates = clip.tracks
       .filter(track => track.name.toLowerCase().endsWith(".position"))
       .map(track => {
         const valueSize = track.getValueSize();
         const values = track.values;
 
-        if (valueSize < 3 || values.length < valueSize) return null;
+        if (valueSize < 3 || values.length < valueSize * 2) return null;
 
         let minX = Infinity;
         let maxX = -Infinity;
@@ -397,7 +396,7 @@ export function createEnemies({
       })
       .filter(Boolean);
 
-    if (!candidates.length) return inPlaceClip;
+    if (!candidates.length) return null;
 
     candidates.sort((a, b) => {
       if (a.likelyRoot !== b.likelyRoot) return a.likelyRoot ? -1 : 1;
@@ -405,12 +404,72 @@ export function createEnemies({
       return b.horizontalMotion - a.horizontalMotion;
     });
 
-    const rootTrack = candidates[0];
-    const values = rootTrack.track.values;
+    return candidates[0];
+  }
+
+  function getRootMotionSpeed(clip, model) {
+    if (!Number.isFinite(clip.duration) || clip.duration <= 0) return 0;
+
+    const rootMotion = findRootMotionTrack(clip, model);
+    if (!rootMotion) return 0;
+
+    const values = rootMotion.track.values;
+    const valueSize = rootMotion.valueSize;
+    const last = values.length - valueSize;
+
+    let scaleX = Math.abs(model.scale.x) || 1;
+    let scaleZ = Math.abs(model.scale.z) || 1;
+
+    // Root-position keys are transformed by the animated node's parent scale.
+    // Use that world scale when the target node can be resolved; otherwise the
+    // model scale is a good fallback for normal GLB skeletons.
+    let targetObject = null;
+    model.traverse(object => {
+      if (targetObject || !object.name) return;
+      if (object.name.trim().toLowerCase() === rootMotion.targetName) {
+        targetObject = object;
+      }
+    });
+
+    const scaleObject = targetObject?.parent || model;
+    if (scaleObject) {
+      scaleObject.updateWorldMatrix(true, false);
+      const worldScale = new THREE.Vector3();
+      scaleObject.getWorldScale(worldScale);
+      scaleX = Math.abs(worldScale.x) || scaleX;
+      scaleZ = Math.abs(worldScale.z) || scaleZ;
+    }
+
+    const startX = values[0];
+    const startZ = values[2];
+    let strideDistance = 0;
+
+    // Use the farthest horizontal displacement from the first key rather than
+    // only first-to-last. Some looping GLB clips snap the root back to its start
+    // position on the final key, which would otherwise look like zero motion.
+    for (let i = 0; i < values.length; i += valueSize) {
+      const dx = (values[i] - startX) * scaleX;
+      const dz = (values[i + 2] - startZ) * scaleZ;
+      strideDistance = Math.max(strideDistance, Math.hypot(dx, dz));
+    }
+
+    // Ignore tiny root/pelvis sway from animations that are already authored
+    // in-place. There is no reliable stride distance to synchronize in that case.
+    if (strideDistance < 0.05) return 0;
+    return strideDistance / clip.duration;
+  }
+
+  function makeClipInPlace(clip, model) {
+    const inPlaceClip = clip.clone();
+    const rootMotion = findRootMotionTrack(inPlaceClip, model);
+
+    if (!rootMotion) return inPlaceClip;
+
+    const values = rootMotion.track.values;
     const startX = values[0];
     const startZ = values[2];
 
-    for (let i = 0; i < values.length; i += rootTrack.valueSize) {
+    for (let i = 0; i < values.length; i += rootMotion.valueSize) {
       values[i] = startX;
       values[i + 2] = startZ;
     }
@@ -492,12 +551,34 @@ export function createEnemies({
       let clip = availableClips[Math.floor(Math.random() * availableClips.length)];
       enemy.userData.selectedAnimationClips[name] = clip.name;
 
+      let walkNaturalSpeed = 0;
+
       if (name === "walk") {
+        // Measure the original root motion before converting the clip to in-place.
+        // The resulting playback multiplier keeps the feet synchronized with the
+        // actual movement speed controlled by enemySpeed.
+        walkNaturalSpeed = getRootMotionSpeed(clip, model);
         clip = makeClipInPlace(clip, model);
       }
 
       const action = mixer.clipAction(clip);
       const loop = name === "walk";
+
+      if (loop && walkNaturalSpeed > 0) {
+        const movementSpeed = Number(enemy.userData.speed) || 0;
+        action.timeScale = movementSpeed > 0
+          ? movementSpeed / walkNaturalSpeed
+          : 0;
+
+        enemy.userData.walkNaturalSpeed = walkNaturalSpeed;
+        enemy.userData.walkTimeScale = action.timeScale;
+      } else if (loop) {
+        // A walk clip with no measurable root translation cannot be auto-synced.
+        // Keep its authored playback rate rather than guessing a stride length.
+        enemy.userData.walkNaturalSpeed = 0;
+        enemy.userData.walkTimeScale = 1;
+        console.warn(`Enemy walk clip has no measurable root motion for speed sync: ${clip.name}`);
+      }
 
       action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
       action.clampWhenFinished = !loop;
