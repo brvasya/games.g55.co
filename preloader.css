@@ -33,10 +33,13 @@
   position: absolute;
   inset: auto 10px 10px;
   height: var(--preloader);
-  padding: 35px 10px 10px;
+  padding: 35px 10px 10px 125px;
   background: #222;
   border-radius: 5px;
   box-sizing: border-box;
+  background-image: url(thumb.png);
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
 .preloader-title,
@@ -47,7 +50,7 @@
   line-height: 1;
 }
 
-.preloader-title { left: 10px; }
+.preloader-title { left: 125px; }
 #preloaderText { right: 10px; }
 
 .preloader-bar {
