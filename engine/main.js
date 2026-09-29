@@ -174,7 +174,7 @@ const touchControls = createTouchControls({
   getStatus: () => ({ ...weapon.getHudState(), canScope: Boolean(weapon.getCurrentAsset().behavior.isSniper), scoped: isZooming })
 });
 
-const impacts = createImpactParticles({ THREE, scene });
+const impacts = createImpactParticles({ THREE, scene, colliders: world.colliders });
 const bulletHoles = createBulletHoles({ THREE, scene });
 
 const impactRaycaster = new THREE.Raycaster();
@@ -981,7 +981,9 @@ function resolveBulletImpact(shot, hit) {
       headshot
     });
 
-    impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
+    impacts.spawnBlood(hit.point, hit.normal, {
+      direction: hit.direction, damage: shot.damage, headshot, pellets: shot.pellets
+    });
 
     if (killed) {
       sounds.playEnemyDie();
@@ -1029,7 +1031,7 @@ function handleMeleeHit(shot) {
 
   const killed = enemies.damageEnemy(enemyHit.enemy, shot.damage);
 
-  impacts.spawnBlood(enemyHit.point, enemyHit.normal.clone().multiplyScalar(-1));
+  impacts.spawnBlood(enemyHit.point, enemyHit.normal, { direction, damage: shot.damage, melee: true });
   sounds.playEnemyHit();
 
   if (killed) {
@@ -1096,6 +1098,8 @@ function getBulletHit(direction, maxDistance = Infinity) {
     result = enemyHit || surfaceHit || null;
   }
 
+  // Keep the exact shot direction, including during the delayed sniper impact.
+  if (result) result.direction = direction.clone();
   resetImpactRaycasterRange();
   return result;
 }
@@ -1790,7 +1794,7 @@ function animate() {
   ) ? sniperBulletCam.enemyHitSlowMoScale : 1;
 
   updateTracers(delta);
-  impacts.update(delta * impactTimeScale);
+  impacts.update(delta * impactTimeScale, sniperBulletCam.active ? sniperBulletCamera : camera);
   bulletHoles.update(delta);
   updateViewPunch(delta);
   updateCameraShake(delta);
