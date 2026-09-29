@@ -2,6 +2,9 @@ import { createGLTFLoader } from "./gltfLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVelocity, weaponSlots }) {
+  const HANDS_MODEL_URL = "./assets/hands.glb";
+  const VALVEBIPED_SOURCE_PREFIX = "ValveBiped.Bip01";
+  const VALVEBIPED_MERGE_PREFIX = THREE.PropertyBinding.sanitizeNodeName(VALVEBIPED_SOURCE_PREFIX);
   const slots = createSlots(weaponSlots);
 
   const settings = {
@@ -27,6 +30,13 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   const modelCache = new Map();
   const audioCache = new Map();
 
+  const handsCache = {
+    source: null,
+    loading: false,
+    failed: false,
+    promise: null
+  };
+
   const actions = new Map();
   const targetPosition = new THREE.Vector3();
   const targetRotation = new THREE.Euler();
@@ -39,6 +49,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   const tempShellVelocity = new THREE.Vector3();
 
   let model = null;
+  let handsModel = null;
+  let boneMergePairs = [];
   let mixer = null;
   let activeAction = null;
   let returnTimer = null;
@@ -52,12 +64,17 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   let currentStateDuration = 0;
   let flashIntensity = 0;
   const flashMaterials = new Set();
+  const boneMergeLocalMatrix = new THREE.Matrix4();
+  const boneMergeParentInverse = new THREE.Matrix4();
 
   rig.name = "FirstPersonWeaponRig";
   resetRigTransform();
   weaponScene.add(rig);
 
-  preloadWeaponAsset(currentModelConfig()).then(() => {
+  Promise.all([
+    preloadWeaponAsset(currentModelConfig()),
+    preloadHandsAsset()
+  ]).then(() => {
     attachCurrentModel();
     play("idle");
   });
@@ -153,6 +170,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
       if (asset.reloadSound) tasks.push(preloadSound(asset.reloadSound));
     });
 
+    tasks.push(preloadHandsAsset());
+
     return Promise.all(tasks).then(() => {
       attachCurrentModel();
       play("idle");
@@ -208,6 +227,60 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     });
 
     return cached.promise;
+  }
+
+  function preloadHandsAsset() {
+    if (handsCache.promise) return handsCache.promise;
+    if (handsCache.source || handsCache.failed) return Promise.resolve(handsCache);
+
+    handsCache.loading = true;
+    const loader = createGLTFLoader();
+
+    handsCache.promise = new Promise(resolve => {
+      loader.load(
+        HANDS_MODEL_URL,
+        gltf => {
+          handsCache.source = gltf.scene;
+          handsCache.loading = false;
+          handsCache.failed = false;
+          resolve(handsCache);
+        },
+        undefined,
+        error => {
+          handsCache.loading = false;
+          handsCache.failed = true;
+          console.warn("Hands model failed to preload:", HANDS_MODEL_URL, error);
+          resolve(handsCache);
+        }
+      );
+    });
+
+    return handsCache.promise;
+  }
+
+  function ensureHandsModel() {
+    if (handsModel || !handsCache.source) return handsModel;
+
+    handsModel = SkeletonUtils.clone(handsCache.source);
+    handsModel.name = "GModHands";
+
+    handsModel.traverse(object => {
+      if (!object.isMesh) return;
+
+      object.frustumCulled = false;
+      object.castShadow = false;
+      object.receiveShadow = true;
+
+      if (Array.isArray(object.material)) {
+        object.material = object.material.map(material => material.clone());
+      } else if (object.material) {
+        object.material = object.material.clone();
+      }
+    });
+
+    rig.add(handsModel);
+    handsModel.visible = false;
+    return handsModel;
   }
 
   function preloadSound(src) {
@@ -481,6 +554,121 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     rig.add(model);
     resetRigTransform();
     setupAnimations(cached.animations);
+    setupValveBipedBoneMerge();
+    syncValveBipedBoneMerge();
+  }
+
+  function setupValveBipedBoneMerge() {
+    boneMergePairs = [];
+
+    const hands = ensureHandsModel();
+    if (!model || !hands) return;
+
+    const weaponBones = collectValveBipedBones(model);
+    const handBones = collectValveBipedBones(hands);
+
+    for (const [name, targetBone] of handBones) {
+      const sourceBone = weaponBones.get(name);
+      if (!sourceBone) continue;
+
+      boneMergePairs.push({
+        sourceBone,
+        targetBone,
+        depth: getObjectDepth(targetBone, hands)
+      });
+    }
+
+    boneMergePairs.sort((a, b) => a.depth - b.depth);
+
+    if (!boneMergePairs.length) {
+      hands.visible = false;
+      console.warn("No matching ValveBiped bones found for hands bone merge", {
+        weaponBones: Array.from(weaponBones.keys()),
+        handBones: Array.from(handBones.keys())
+      });
+      return;
+    }
+
+    const unmatchedHandBones = Array.from(handBones.keys()).filter(name => !weaponBones.has(name));
+    console.info(`ValveBiped bone merge active: ${boneMergePairs.length}/${handBones.size} hands bones matched`,
+      unmatchedHandBones.length ? { unmatchedHandBones } : "");
+
+    hands.visible = true;
+  }
+
+  function collectValveBipedBones(root) {
+    const bones = new Map();
+
+    root.traverse(object => {
+      if (!object.isBone) return;
+
+      const canonicalName = getCanonicalValveBipedBoneName(object.name);
+      if (!canonicalName) return;
+
+      bones.set(canonicalName, object);
+    });
+
+    return bones;
+  }
+
+  function getCanonicalValveBipedBoneName(name) {
+    if (!name) return null;
+
+    // GLTFLoader sanitizes Object3D/Bone names with PropertyBinding rules.
+    // Reserved characters such as the dot in `ValveBiped.Bip01_*` are
+    // REMOVED (not replaced), so at runtime the same bone is typically named
+    // `ValveBipedBip01_*`. Sanitizing again is idempotent and also supports
+    // unsanitized names, making weapon and hands matching independent of how
+    // the GLB was exported or cloned.
+    const runtimeName = THREE.PropertyBinding.sanitizeNodeName(String(name));
+    if (!runtimeName.startsWith(VALVEBIPED_MERGE_PREFIX)) return null;
+
+    return runtimeName;
+  }
+
+  function getObjectDepth(object, root) {
+    let depth = 0;
+    let current = object;
+
+    while (current && current !== root) {
+      depth += 1;
+      current = current.parent;
+    }
+
+    return depth;
+  }
+
+  function syncValveBipedBoneMerge() {
+    if (!model || !handsModel || !boneMergePairs.length) return;
+
+    // GMod-style bone merge: each c_hands ValveBiped bone is driven by the
+    // matching animated view-model bone in world space. This deliberately
+    // ignores the hands model's own hierarchy and uses no hand offsets.
+    model.updateWorldMatrix(true, true);
+    handsModel.updateWorldMatrix(true, true);
+
+    for (const { sourceBone, targetBone } of boneMergePairs) {
+      const parent = targetBone.parent;
+
+      if (parent) {
+        parent.updateWorldMatrix(true, false);
+        boneMergeParentInverse.copy(parent.matrixWorld).invert();
+        boneMergeLocalMatrix.multiplyMatrices(boneMergeParentInverse, sourceBone.matrixWorld);
+      } else {
+        boneMergeLocalMatrix.copy(sourceBone.matrixWorld);
+      }
+
+      boneMergeLocalMatrix.decompose(
+        targetBone.position,
+        targetBone.quaternion,
+        targetBone.scale
+      );
+
+      targetBone.updateMatrix();
+      targetBone.updateWorldMatrix(false, false);
+    }
+
+    handsModel.updateWorldMatrix(false, true);
   }
 
   function clearModel() {
@@ -490,6 +678,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     }
 
     model = null;
+    boneMergePairs = [];
+    if (handsModel) handsModel.visible = false;
     mixer = null;
     activeAction = null;
     actions.clear();
@@ -619,6 +809,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
     updateShells(delta);
     if (mixer) mixer.update(delta);
+    syncValveBipedBoneMerge();
 
     currentStateTime += delta;
     recoil = THREE.MathUtils.lerp(recoil, 0, 1 - Math.exp(-settings.returnSpeed * delta));
