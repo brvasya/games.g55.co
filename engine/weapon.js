@@ -31,7 +31,9 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   const targetPosition = new THREE.Vector3();
   const targetRotation = new THREE.Euler();
   const shellGeometry = new THREE.CylinderGeometry(0.18, 0.18, 0.8, 8);
-  const shellMaterial = new THREE.MeshBasicMaterial({ color: 0xc89b3c });
+  const shellMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc89b3c, roughness: 0.42, metalness: 0.45
+  });
   const shells = [];
   const tempShellPosition = new THREE.Vector3();
   const tempShellVelocity = new THREE.Vector3();
@@ -190,7 +192,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
             if (!object.isMesh) return;
             object.frustumCulled = false;
             object.castShadow = false;
-            object.receiveShadow = false;
+            object.receiveShadow = true;
           });
 
           resolve(cached);
@@ -465,7 +467,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
       object.frustumCulled = false;
       object.castShadow = false;
-      object.receiveShadow = false;
+      object.receiveShadow = true;
 
       if (Array.isArray(object.material)) {
         object.material = object.material.map(material => material.clone());
@@ -678,12 +680,14 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     return model.getObjectByName(name) ?? null;
   }
 
-  function getShellEjectWorldPosition(shellConfig, target) {
+  function getShellEjectLocalPosition(shellConfig, target) {
     const ejectObject = findWeaponObjectByName(shellConfig.boneName);
     if (!ejectObject) return null;
 
     ejectObject.getWorldPosition(target);
-    return target;
+    // The view-model parent now follows the world camera. Shell simulation
+    // still uses its original local coordinates, just like weapon animations.
+    return weaponScene.worldToLocal(target);
   }
 
   function getShellEjectVelocity(target) {
@@ -698,11 +702,12 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
   function ejectShell() {
     const shellConfig = getShellEjectConfig();
-    const shellPosition = getShellEjectWorldPosition(shellConfig, tempShellPosition);
+    const shellPosition = getShellEjectLocalPosition(shellConfig, tempShellPosition);
 
     if (!shellPosition) return;
 
     const shell = new THREE.Mesh(shellGeometry, shellMaterial.clone());
+    shell.receiveShadow = true;
     shell.material.transparent = true;
     shell.material.opacity = 1;
 

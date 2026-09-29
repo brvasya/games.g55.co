@@ -8,6 +8,7 @@ export function createEnemies({
   config,
   state,
   floorObjects = [],
+  navigation = null,
   enemyTypes
 }) {
   const enemies = [];
@@ -144,8 +145,13 @@ export function createEnemies({
 
           cached.source.traverse(object => {
             if (!object.isMesh) return;
-            object.castShadow = false;
-            object.receiveShadow = false;
+            const materials = Array.isArray(object.material) ? object.material : [object.material];
+            // Let the body cast its animated silhouette. Blended wound/hair
+            // overlays without an alpha cutoff must not cast solid cards.
+            object.castShadow = materials.some(material =>
+              material && (!material.transparent || material.alphaTest > 0)
+            );
+            object.receiveShadow = true;
             object.frustumCulled = true;
           });
 
@@ -342,6 +348,7 @@ export function createEnemies({
   }
 
   function getRandomFloorPoint() {
+    if (navigation) return navigation.getSpawnPoint(camera.position);
     let point = null;
     let tries = NAV_TUNING.maxTargetTries;
 
@@ -1135,7 +1142,7 @@ export function createEnemies({
         playerPosition.z - enemy.position.z
       );
 
-      const distance = Math.abs((playerPosition.y - config.playerHeight) - enemy.position.y) > enemy.userData.attackDistance ? Infinity : toPlayer.length();
+      const distance = Math.abs((playerPosition.y - config.playerHeight) - enemy.position.y) > enemy.userData.attackDistance || (navigation && !navigation.hasLineOfSight(enemy.position, playerPosition)) ? Infinity : toPlayer.length();
 
       if (distance <= enemy.userData.attackDistance) {
         enemy.userData.navTarget = null;
@@ -1174,7 +1181,7 @@ export function createEnemies({
 
         const currentDistance = Math.abs((playerPosition.y - config.playerHeight) - enemy.position.y) > enemy.userData.attackDistance ? Infinity : getFlatDistance(enemy.position, playerPosition);
 
-        if (currentDistance <= enemy.userData.attackDistance) {
+        if (currentDistance <= enemy.userData.attackDistance && (!navigation || navigation.hasLineOfSight(enemy.position, playerPosition))) {
           takeDamage(enemy.userData.damage);
         }
       }
@@ -1188,6 +1195,27 @@ export function createEnemies({
   }
 
   function moveEnemy(enemy, playerPosition, delta) {
+    if (navigation) {
+      const target = navigation.getMoveTarget(enemy.position, playerPosition);
+      const dx = target.x - enemy.position.x;
+      const dz = target.z - enemy.position.z;
+      const length = Math.hypot(dx, dz);
+      if (length < 0.01) return;
+      const travel = Math.min(length, enemy.userData.speed * delta);
+      const oldX = enemy.position.x, oldZ = enemy.position.z;
+      const nextX = oldX + dx / length * travel;
+      const nextZ = oldZ + dz / length * travel;
+      if (!navigation.isWalkable(nextX, nextZ)) return;
+      enemy.position.x = nextX;
+      enemy.position.z = nextZ;
+      if (!snapEnemyToTerrain(enemy, false)) {
+        enemy.position.x = oldX;
+        enemy.position.z = oldZ;
+        return;
+      }
+      enemy.lookAt(target.x, enemy.position.y, target.z);
+      return;
+    }
     enemy.userData.navTargetAge += delta;
 
     if (enemy.userData.navTarget && enemy.userData.navTargetAge > NAV_TUNING.targetMaxAge) {

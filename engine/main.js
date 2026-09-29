@@ -98,6 +98,14 @@ const dom = {
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
 const weaponScene = new THREE.Scene();
+// Keep the authored view-model framing, but place its geometry at the player
+// in world meters so light distance, direction, and shadow sampling are correct.
+const weaponWorldScale = 0.0254;
+const weaponRoot = new THREE.Group();
+weaponRoot.name = "FirstPersonWorldAnchor";
+weaponRoot.scale.setScalar(weaponWorldScale);
+weaponScene.add(weaponRoot);
+const weaponLightLinks = [];
 
 scene.background = new THREE.Color(0x87a7c7);
 scene.fog = new THREE.Fog(0x87a7c7, 22, 75);
@@ -108,7 +116,10 @@ let isZooming = false;
 camera.position.set(0, CONFIG.playerHeight, 8);
 scene.add(camera);
 
-const weaponCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.001, 100);
+const weaponCamera = new THREE.PerspectiveCamera(
+  70, window.innerWidth / window.innerHeight,
+  0.001 * weaponWorldScale, 100 * weaponWorldScale
+);
 weaponScene.add(weaponCamera);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -132,7 +143,7 @@ let enemies = null;
 
 const weapon = createWeaponSystem({
   THREE,
-  weaponScene,
+  weaponScene: weaponRoot,
   weaponCamera,
   playerVelocity: player.velocity,
   weaponSlots: GAME_ASSETS.weaponSlots
@@ -288,6 +299,7 @@ function createEnemySystemIfNeeded() {
     state,
     floorObjects: world.floorObjects,
     colliders: world.colliders,
+    navigation: world.navigation,
     enemyTypes: GAME_ASSETS.enemies.types,
     defaultEnemyType: GAME_ASSETS.enemies.defaultType
   });
@@ -314,19 +326,85 @@ async function preloadAllAssets() {
 }
 
 function setupLights() {
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xffffff, 1.5));
+  const lighting = world.lighting || {};
+  scene.add(new THREE.HemisphereLight(
+    lighting.hemisphereSky ?? 0xffffff,
+    lighting.hemisphereGround ?? 0xffffff,
+    lighting.hemisphereIntensity ?? 1.5
+  ));
 
-  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(10, 18, 8);
+  const sun = new THREE.DirectionalLight(lighting.sunColor ?? 0xffffff, lighting.sunIntensity ?? 1.5);
+  sun.position.set(...(lighting.sunPosition || [10, 18, 8]));
+  sun.shadow.camera.left = -56;
+  sun.shadow.camera.right = 56;
+  sun.shadow.camera.top = 56;
+  sun.shadow.camera.bottom = -56;
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 150;
+  sun.shadow.bias = -0.00025;
+  sun.shadow.normalBias = 0.06;
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   scene.add(sun);
 
-  weaponScene.add(new THREE.HemisphereLight(0xffffff, 0x333333, 2.5));
+  // The separate pass keeps weapons clear of nearby walls. Its lights mirror
+  // the world, including the animated fire and police lights, instead of using
+  // a permanent white light attached to the camera.
+  scene.traverse(source => {
+    if (!source.isLight) return;
+    const light = source.clone(false);
+    light.name = "ViewModel_" + (source.name || source.type);
+    if (light.shadow) {
+      light.shadow.autoUpdate = false;
+      light.shadow.needsUpdate = false;
+    }
+    weaponScene.add(light);
+    if (light.target) weaponScene.add(light.target);
+    weaponLightLinks.push({ source, light });
+  });
+}
 
-  const weaponLight = new THREE.PointLight(0xffffff, 2.0, 5);
-  weaponLight.position.set(0.3, -0.25, 0.5);
-  weaponCamera.add(weaponLight);
+function syncWeaponWorldLighting() {
+  camera.getWorldPosition(weaponCamera.position);
+  camera.getWorldQuaternion(weaponCamera.quaternion);
+  weaponRoot.position.copy(weaponCamera.position);
+  weaponRoot.quaternion.copy(weaponCamera.quaternion);
+  weaponRoot.updateMatrixWorld(true);
+  weaponCamera.updateMatrixWorld(true);
+  weaponScene.environment = scene.environment;
+
+  for (const { source, light } of weaponLightLinks) {
+    light.color.copy(source.color);
+    light.intensity = source.intensity;
+    light.visible = true;
+    for (let parent = source; parent; parent = parent.parent) {
+      if (!parent.visible) { light.visible = false; break; }
+    }
+    source.getWorldPosition(light.position);
+    source.getWorldQuaternion(light.quaternion);
+    if (source.groundColor) light.groundColor.copy(source.groundColor);
+    for (const property of ["distance", "decay", "angle", "penumbra"]) {
+      if (property in source) light[property] = source[property];
+    }
+    if (source.target) {
+      source.target.getWorldPosition(light.target.position);
+      light.target.updateMatrixWorld(true);
+    }
+    // The world has just rendered, so reuse its current shadow texture. Do not
+    // render a second shadow pass containing only the view-model: that would
+    // erase the building shadows. The source light owns this shared texture.
+    light.castShadow = Boolean(source.castShadow && source.shadow?.map);
+    if (light.castShadow) {
+      light.shadow.map = source.shadow.map;
+      light.shadow.matrix.copy(source.shadow.matrix);
+      light.shadow.mapSize.copy(source.shadow.mapSize);
+      light.shadow.bias = source.shadow.bias;
+      light.shadow.normalBias = source.shadow.normalBias;
+      light.shadow.radius = source.shadow.radius;
+      light.shadow.camera.near = source.shadow.camera.near;
+      light.shadow.camera.far = source.shadow.camera.far;
+    }
+  }
 }
 
 function setupInput() {
@@ -1663,6 +1741,7 @@ function renderWithCameraShake() {
   renderer.clear();
   renderer.render(scene, camera);
   if (!isZooming) {
+    syncWeaponWorldLighting();
     renderer.clearDepth();
     renderer.render(weaponScene, weaponCamera);
   }
@@ -1682,6 +1761,7 @@ function animate() {
 
   player.update(delta, gameplayActive);
   recoverPlayerFall();
+  world.update?.(delta, camera);
 
   if (state.isPlaying && player.inputState.jumped) {
     sounds.playJump();
