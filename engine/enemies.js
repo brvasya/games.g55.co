@@ -1363,7 +1363,7 @@ export function createEnemies({
     return String(boneName).toLowerCase().includes("head");
   }
 
-  function damageEnemy(enemy, damage, { instantKill = false } = {}) {
+  function damageEnemy(enemy, damage, { instantKill = false, headshot = false } = {}) {
     if (!enemy || !enemies.includes(enemy)) return false;
     if (enemy.userData.isDying) return false;
 
@@ -1384,7 +1384,11 @@ export function createEnemies({
         enemy.userData.currentAction.fadeOut(0.05);
       }
 
-      const deathAction = enemy.userData.actions["death"];
+      // Headshot kills get their own death animation. If the configured
+      // headshot clip is missing, fall back to the normal death action.
+      const deathAction = headshot
+        ? (enemy.userData.actions["headshot"] || enemy.userData.actions["death"])
+        : enemy.userData.actions["death"];
 
       if (deathAction) {
         const deathSound = enemy.userData.type.asset.deathSound;
