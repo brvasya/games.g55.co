@@ -70,7 +70,7 @@ export function createHud() {
     }
 
     const button = event.target.closest("[data-buy-slot]");
-    if (!button || !buyCallback) return;
+    if (!button || !buyCallback || button.classList.contains("locked")) return;
     buyCallback(Number(button.dataset.buySlot), "weapon");
   });
 
@@ -159,24 +159,25 @@ export function createHud() {
         ? '<span class="cs-buy-owned-text">ACTIVE</span>'
         : weapon.owned
           ? '<span class="cs-buy-owned-text">OWNED</span>'
-          : `<span class="cs-buy-price ${priceClass}">$${weapon.price}</span>`;
-      const actionText = weapon.owned ? "Select" : "Buy";
-      const disabled = weapon.active || (!weapon.owned && !canBuy) ? "disabled" : "";
+          : `<span class="cs-buy-price ${priceClass}">BUY</span>`;
       const stateClass = weapon.active ? "active" : weapon.owned ? "owned" : canBuy ? "available" : "locked";
-      const ammoButton = weapon.owned && !weapon.isMelee
+      const bottomAction = weapon.owned && !weapon.isMelee
         ? `<button class="cs-buy-action ${ammoPriceClass}" data-buy-ammo="${weapon.id}" type="button" ${canBuyAmmo ? "" : "disabled"}>
               <span class="cs-buy-price ${ammoPriceClass}">+ AMMO $${ammoPrice}</span>
            </button>`
-        : "";
+        : !weapon.owned
+          ? `<button class="cs-buy-action cs-buy-purchase ${priceClass}" type="button" ${canBuy ? "" : "disabled"}>
+                <span class="cs-buy-price ${priceClass}">$${weapon.price}</span>
+             </button>`
+          : '<span class="cs-buy-action-spacer" aria-hidden="true"></span>';
 
       return `
-        <div class="cs-buy-card ${stateClass}" data-buy-slot="${weapon.id}" type="button" ${disabled}>
+        <div class="cs-buy-card ${stateClass}" data-buy-slot="${weapon.id}">
           <span class="cs-buy-key">${weapon.id}</span>
           <span class="cs-buy-name">${weapon.name}</span>
           <span class="cs-buy-stats">${weapon.damage} DMG · ${weapon.magazineSize} MAG</span>
           <span class="cs-buy-status">${status}</span>
-          <span class="cs-buy-action">${actionText}</span>
-          ${ammoButton}
+          ${bottomAction}
         </div>
       `;
     }).join("");
