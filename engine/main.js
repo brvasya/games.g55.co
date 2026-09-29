@@ -656,7 +656,8 @@ function shoot() {
     if (hit?.type === "enemy") {
       const headshot = Boolean(hit.headshot);
       const killed = enemies.damageEnemy(hit.enemy, shot.damage, {
-        instantKill: shouldInstantKillHeadshot(hit)
+        instantKill: shouldInstantKillHeadshot(hit),
+        headshot
       });
 
       impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
