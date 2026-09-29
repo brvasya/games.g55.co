@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createPreloader } from "./preloader.js";
 import { createPlayer } from "./player.js";
 import { createTouchControls } from "./touchControls.js";
+import { renderGameTitle, controlsText, focusMenu, clearMenuSelection, trapDialogFocus } from "./ui.js";
 import { createWeaponSystem } from "./weapon.js";
 import { createWorld } from "./world.js";
 import { createEnemies } from "./enemies.js";
@@ -50,6 +51,12 @@ const state = {
 
 const preloader = createPreloader();
 let bootLoadingActive = true;
+let bootReady = false;
+let startPending = false;
+let mainMenuNeedsReset = false;
+let gameOverOverlayTimer = null;
+let noticeTimer = null;
+let lastWheelSwitch = -Infinity;
 
 THREE.DefaultLoadingManager.onStart = () => {
   if (!bootLoadingActive) return;
@@ -82,6 +89,9 @@ const dom = {
   panelTitle: document.querySelector("#panel h1"),
   panelText: document.querySelector("#panel p"),
   damageFlash: document.getElementById("damageFlash"),
+  mainMenuButton: document.getElementById("mainMenuButton"),
+  fullscreenButton: document.getElementById("fullscreenButton"),
+  uiStatus: document.getElementById("uiStatus"),
   moreGamesButton: null
 };
 
@@ -112,7 +122,12 @@ const hud = createHud();
 hud.setBuyCallback(handleBuyMenuSlot);
 hud.setBuyCloseCallback(() => closeBuyMenu(true));
 const world = createWorld({ THREE, scene, worldConfig: GAME_ASSETS.world });
-const player = createPlayer({ THREE, camera, config: CONFIG, colliders: world.colliders });
+const player = createPlayer({ THREE, camera, config: CONFIG, colliders: world.colliders,
+  onFallbackLook: () => {
+    document.body.classList.add("fallback-look");
+    if (state.isPlaying) showNotice("Mouse capture unavailable. Hold left mouse and drag to aim and fire.");
+  }
+});
 let enemies = null;
 
 const weapon = createWeaponSystem({
@@ -239,6 +254,7 @@ async function boot() {
   setupLights();
   setupInput();
   setupOverlayButtons();
+  renderer.render(scene, camera);
 
   try {
     await world.ready;
@@ -247,17 +263,16 @@ async function boot() {
     await resetGame();
     preloader.setProgress(100);
     bootLoadingActive = false;
-    requestAnimationFrame(() => preloader.hide());
+    bootReady = true;
+    requestAnimationFrame(() => { preloader.hide(); focusMenu(dom.overlay); });
     animate();
   } catch (error) {
     console.error("Game failed to initialize:", error);
     bootLoadingActive = false;
     preloader.hide();
 
-    dom.overlay.style.display = "grid";
-    dom.panelTitle.textContent = "Loading Error";
-    dom.panelText.textContent = "The game could not load correctly. Please refresh the page.";
-    dom.startButton.textContent = "Refresh";
+    showOverlay("Loading Error", "The game could not load. Check your connection and try again.", "Retry");
+    dom.mainMenuButton.hidden = true;
     dom.startButton.onclick = () => window.location.reload();
   }
 }
@@ -315,35 +330,49 @@ function setupLights() {
 }
 
 function setupInput() {
+  document.addEventListener("pointerdown", clearMenuSelection, true);
   dom.startButton.addEventListener("click", startGame);
+  dom.mainMenuButton.addEventListener("click", returnToMainMenu);
+  dom.fullscreenButton.addEventListener("click", toggleFullscreen);
+  document.addEventListener("fullscreenchange", () => {
+    dom.fullscreenButton.textContent = document.fullscreenElement ? "Exit fullscreen" : "Fullscreen";
+  });
+  dom.fullscreenButton.hidden = typeof document.documentElement.requestFullscreen !== "function";
   window.addEventListener("resize", onResize);
 
   document.addEventListener("keydown", e => {
-    if (e.code === "KeyB") {
-      toggleBuyMenu();
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.code === "KeyF") {
+      e.preventDefault();
+      if (!e.repeat) toggleFullscreen();
       return;
     }
-
-    if (e.code === "KeyF") {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
-      } else {
-        document.exitFullscreen();
+    if (state.isBuyMenuOpen) {
+      trapDialogFocus(document.getElementById("buyMenu"), e);
+      if (e.repeat) return;
+      if (/^(Digit|Numpad)[1-6]$/.test(e.code)) {
+        e.preventDefault();
+        handleBuyMenuSlot(Number(e.code.slice(-1)), "weapon");
+      }
+      if (e.code === "Escape" || e.code === "KeyB") { e.preventDefault(); closeBuyMenu(true); }
+      return;
+    }
+    if (!state.isPlaying) {
+      trapDialogFocus(dom.overlay, e);
+      return;
+    }
+    if (e.code === "Escape" || e.code === "Tab") {
+      e.preventDefault();
+      if (!e.repeat) {
+        pauseGame();
+        if (e.code === "Tab") trapDialogFocus(dom.overlay, e);
       }
       return;
     }
-
-    if (state.isBuyMenuOpen) {
-      if (/^Digit[1-9]$/.test(e.code)) handleBuyMenuSlot(Number(e.code.replace("Digit", "")), "weapon");
-      if (/^Numpad[1-9]$/.test(e.code)) handleBuyMenuSlot(Number(e.code.replace("Numpad", "")), "weapon");
-      if (e.code === "Escape") closeBuyMenu(true);
-      return;
-    }
-
-    if (/^Digit[1-9]$/.test(e.code)) switchWeapon(Number(e.code.replace("Digit", "")));
-    if (/^Numpad[1-9]$/.test(e.code)) switchWeapon(Number(e.code.replace("Numpad", "")));
-    if (e.code === "KeyR") reload();
-    if (e.code === "Escape") pauseGame();
+    if (e.code === "KeyB") { e.preventDefault(); if (!e.repeat) toggleBuyMenu(); return; }
+    if (sniperBulletCam.active || isTouchPortrait() || touchControls.isPickerOpen) return;
+    if (/^(Digit|Numpad)[1-6]$/.test(e.code)) { e.preventDefault(); if (!e.repeat) switchWeapon(Number(e.code.slice(-1))); }
+    if (e.code === "KeyR") { e.preventDefault(); if (!e.repeat) reload(); }
     player.onKeyDown(e);
   });
 
@@ -354,19 +383,19 @@ function setupInput() {
     if (Math.abs(e.deltaY) < 1) return;
 
     e.preventDefault();
+    if (sniperBulletCam.active || touchControls.isPickerOpen || performance.now() - lastWheelSwitch < 140) return;
+    lastWheelSwitch = performance.now();
     switchWeaponByWheel(e.deltaY > 0 ? 1 : -1);
   }, { passive: false });
 
   document.addEventListener("mousedown", e => {
-    if (e.target.closest?.("#touchControls")) return;
-    if (e.button === 2) {
-      startZoom();
-      return;
-    }
-
-    if (e.button !== 0 || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
+    if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active || touchControls.isPickerOpen || isTouchPortrait()) return;
+    if (e.target.closest?.("button, a, #overlay, #buyMenu, #touchControls")) return;
+    if (e.button === 2) { e.preventDefault(); startZoom(); return; }
+    if (e.button !== 0) return;
     sounds.resume();
     player.onMouseDown(e);
+    shoot();
   });
 
   document.addEventListener("mouseup", e => {
@@ -379,8 +408,9 @@ function setupInput() {
   });
 
   document.addEventListener("mousemove", e => {
-    if (sniperBulletCam.active) return;
-    player.onMouseMove(e);
+    if (!state.isPlaying || sniperBulletCam.active || touchControls.isPickerOpen || isTouchPortrait()) return;
+    const zoomScale = isZooming ? Math.max(0.12, Math.tan(camera.fov * Math.PI / 360) / Math.tan(defaultFov * Math.PI / 360)) : 1;
+    player.onMouseMove(e, zoomScale);
   });
   document.addEventListener("contextmenu", e => e.preventDefault());
   document.addEventListener("pointerlockchange", onPointerLockChange);
@@ -389,7 +419,7 @@ function setupInput() {
     stopZoom();
     player.clearMovement();
     touchControls.reset();
-    if (touchControls.enabled) pauseGame();
+    pauseGame();
   };
   window.addEventListener("blur", interruptInput);
   window.addEventListener("pagehide", interruptInput);
@@ -418,21 +448,82 @@ function isTouchPortrait() {
   return touchControls.enabled && touchControls.isPortrait();
 }
 
-async function startGame() {
-  sounds.resume();
+function showNotice(message) {
+  clearTimeout(noticeTimer);
+  dom.uiStatus.textContent = message;
+  dom.uiStatus.classList.add("visible");
+  noticeTimer = setTimeout(() => dom.uiStatus.classList.remove("visible"), 4000);
+}
 
-  if (state.isWaveComplete) {
-    continueWave();
-    return;
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+    else showNotice("Fullscreen is unavailable in this browser.");
+  } catch {
+    showNotice("Fullscreen is unavailable here. You can continue in this window.");
   }
+}
 
-  if (state.isGameOver) await resetGame();
+function showOverlay(title, text, action) {
+  document.body.classList.remove("main-menu-active");
+  dom.overlay.classList.remove("main-menu");
+  dom.overlay.style.display = "grid";
+  dom.panelTitle.textContent = title;
+  dom.panelText.textContent = text;
+  dom.startButton.textContent = action;
+  dom.startButton.disabled = false;
+  dom.mainMenuButton.hidden = false;
+  focusMenu(dom.overlay);
+}
 
-  state.isPlaying = true;
-  dom.overlay.style.display = "none";
-  document.body.classList.remove("fallback-look");
+function returnToMainMenu() {
+  clearTimeout(gameOverOverlayTimer);
+  state.isPlaying = false;
+  state.isBuyMenuOpen = false;
+  hud.hideBuyMenu();
+  player.clearMovement();
+  touchControls.reset();
+  cancelSniperBulletCamera();
+  stopZoom();
+  if (document.pointerLockElement) document.exitPointerLock();
+  document.body.classList.remove("cursor-locked", "fallback-look");
+  document.body.classList.add("main-menu-active");
+  dom.overlay.classList.add("main-menu");
+  dom.overlay.style.display = "grid";
+  dom.damageFlash.style.opacity = "0";
+  renderGameTitle(dom.panelTitle, CONFIG.gameTitle);
+  dom.panelText.textContent = controlsText(touchControls.enabled);
+  dom.startButton.textContent = "Start Game";
+  dom.mainMenuButton.hidden = true;
+  mainMenuNeedsReset = true;
+  focusMenu(dom.overlay);
+}
 
-  if (!touchControls.enabled) player.lockCursor();
+async function startGame() {
+  if (!bootReady || startPending) return;
+  startPending = true;
+  dom.startButton.disabled = true;
+  sounds.resume();
+  try {
+    clearMenuSelection();
+    player.clearMovement();
+    touchControls.reset();
+    if (state.isGameOver || mainMenuNeedsReset) {
+      await resetGame();
+      mainMenuNeedsReset = false;
+    }
+    if (state.isWaveComplete) { continueWave(); return; }
+    state.isPlaying = true;
+    dom.overlay.style.display = "none";
+    document.body.classList.remove("fallback-look", "main-menu-active");
+    dom.overlay.classList.remove("main-menu");
+    document.activeElement?.blur();
+    if (!touchControls.enabled) player.lockCursor();
+  } finally {
+    startPending = false;
+    dom.startButton.disabled = false;
+  }
 }
 
 function pauseGame() {
@@ -446,10 +537,7 @@ function pauseGame() {
 
   if (document.pointerLockElement === document.body) document.exitPointerLock();
 
-  dom.overlay.style.display = "grid";
-  dom.panelTitle.textContent = "Paused";
-  dom.panelText.textContent = touchControls.enabled ? "Tap continue to resume the game." : "Click continue to lock the cursor again.";
-  dom.startButton.textContent = "Continue";
+  showOverlay("Paused", "Resume when you’re ready. Your progress is kept.", "Resume");
 }
 
 function toggleBuyMenu() {
@@ -488,7 +576,10 @@ function closeBuyMenu(resumeGame = false) {
 
   if (!resumeGame || state.isGameOver || state.isWaveComplete) return;
 
+  player.clearMovement();
+  clearMenuSelection();
   state.isPlaying = true;
+  document.activeElement?.blur();
   if (!touchControls.enabled) player.lockCursor();
 }
 
@@ -496,7 +587,8 @@ function updateBuyMenu() {
   if (!hud.updateBuyMenu || !weapon.getShopState) return;
   hud.updateBuyMenu({
     score: state.score,
-    weapons: weapon.getShopState()
+    weapons: weapon.getShopState(),
+    isReloading: weapon.getHudState().isReloading
   });
 }
 
@@ -523,7 +615,10 @@ function handleBuyMenuSlot(slotNumber, type = "weapon") {
     return;
   }
 
+  if (weapon.getHudState().isReloading && !slot.active) return;
+
   if (slot.owned) {
+    if (slot.active) { closeBuyMenu(true); return; }
     if (weapon.switchSlot(slotNumber)) {
       stopZoom();
       playBuyMenuWeaponSound();
@@ -625,10 +720,7 @@ function showWaveComplete() {
 
   updateHud();
 
-  dom.overlay.style.display = "grid";
-  dom.panelTitle.textContent = `Wave ${state.wave} Complete`;
-  dom.panelText.textContent = `Continue to start wave ${state.wave + 1}`;
-  dom.startButton.textContent = "Continue";
+  showOverlay(`Wave ${state.wave} Complete`, `Ready for wave ${state.wave + 1}?`, "Next Wave");
 }
 
 function continueWave() {
@@ -648,11 +740,16 @@ function continueWave() {
 
 function onPointerLockChange() {
   const locked = document.pointerLockElement === document.body;
+  if (locked && !state.isPlaying) { document.exitPointerLock(); return; }
 
   player.setPointerLockActive(locked);
   document.body.classList.toggle("cursor-locked", locked);
+  if (locked) {
+    document.body.classList.remove("fallback-look");
+    dom.uiStatus.classList.remove("visible");
+  }
 
-  if (!locked && state.isPlaying && !state.isGameOver && !state.isWaveComplete && !state.isBuyMenuOpen && player.pointerLockSupported) {
+  if (!locked && state.isPlaying && !state.isGameOver && !state.isWaveComplete && !state.isBuyMenuOpen && player.pointerLockSupported && !player.fallbackLookEnabled) {
     pauseGame();
   }
 
@@ -694,7 +791,7 @@ function switchWeapon(slotNumber) {
 
   const slot = weapon.getShopState().find(item => item.id === slotNumber);
 
-  if (slot && !slot.owned) return false;
+  if (!slot || !slot.owned) return false;
 
   if (weapon.switchSlot(slotNumber)) {
     stopZoom();
@@ -726,7 +823,7 @@ function updateHud() {
 }
 
 function shoot() {
-  if (!enemies || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active) return;
+  if (!enemies || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active) return;
 
   const shot = weapon.shoot();
 
@@ -1445,15 +1542,15 @@ function endGame() {
 
   sounds.playPlayerDie();
 
-  setTimeout(() => {
-    dom.overlay.style.display = "grid";
-    dom.panelTitle.textContent = "Game Over";
-    dom.panelText.textContent = `Wave reached: ${state.wave}`;
-    dom.startButton.textContent = "Restart";
+  clearTimeout(gameOverOverlayTimer);
+  gameOverOverlayTimer = setTimeout(() => {
+    showOverlay("Game Over", `Wave reached: ${state.wave}`, "Restart");
   }, 650);
 }
 
 async function resetGame() {
+  clearTimeout(gameOverOverlayTimer);
+  player.clearMovement();
   state.health = 100;
   state.score = 0;
   state.wave = 1;

@@ -1,4 +1,4 @@
-export function createPlayer({ THREE, camera, config, colliders }) {
+export function createPlayer({ THREE, camera, config, colliders, onFallbackLook = () => {} }) {
   const MOVE_TUNING = {
     maxGroundSpeed: config.playerSpeed,
     maxWalkSpeed: config.playerSpeed * config.walkMultiplier,
@@ -69,8 +69,9 @@ export function createPlayer({ THREE, camera, config, colliders }) {
   let pitch = 0;
   let verticalVelocity = 0;
   let canJump = true;
-  let pointerLockSupported = hasPointerLockSupport();
+  const pointerLockSupported = hasPointerLockSupport();
   let pointerLockActive = false;
+  let fallbackLookEnabled = !pointerLockSupported;
   let dragLookActive = false;
   let lastDragX = 0;
   let lastDragY = 0;
@@ -116,12 +117,14 @@ export function createPlayer({ THREE, camera, config, colliders }) {
   }
 
   function enableFallbackLook() {
-    pointerLockSupported = false;
+    fallbackLookEnabled = true;
     pointerLockActive = false;
+    onFallbackLook();
   }
 
   function setPointerLockActive(value) {
     pointerLockActive = value;
+    if (value) fallbackLookEnabled = false;
   }
 
   function onKeyDown(event) {
@@ -153,7 +156,7 @@ export function createPlayer({ THREE, camera, config, colliders }) {
   function onMouseDown(event) {
     if (event.button === 0) inputState.mouseDown = true;
 
-    if (!pointerLockActive && !pointerLockSupported && event.button === 0) {
+    if (!pointerLockActive && fallbackLookEnabled && event.button === 0) {
       dragLookActive = true;
       lastDragX = event.clientX;
       lastDragY = event.clientY;
@@ -167,9 +170,9 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     }
   }
 
-  function onMouseMove(event) {
+  function onMouseMove(event, sensitivityMultiplier = 1) {
     if (pointerLockActive) {
-      rotateView(event.movementX, event.movementY, config.mouseSensitivity);
+      rotateView(event.movementX, event.movementY, config.mouseSensitivity * sensitivityMultiplier);
       return;
     }
 
@@ -178,7 +181,7 @@ export function createPlayer({ THREE, camera, config, colliders }) {
       const deltaY = event.clientY - lastDragY;
       lastDragX = event.clientX;
       lastDragY = event.clientY;
-      rotateView(deltaX, deltaY, config.dragSensitivity);
+      rotateView(deltaX, deltaY, config.dragSensitivity * sensitivityMultiplier);
     }
   }
 
@@ -546,6 +549,10 @@ export function createPlayer({ THREE, camera, config, colliders }) {
 
     get pointerLockActive() {
       return pointerLockActive;
+    },
+
+    get fallbackLookEnabled() {
+      return fallbackLookEnabled;
     },
 
     lockCursor,

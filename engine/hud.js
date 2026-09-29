@@ -1,3 +1,6 @@
+import { focusControl, focusMenu } from "./ui.js";
+import { isTouchDevice as detectTouch } from "./touchControls.js";
+
 export function createHud() {
   const hud = document.getElementById("hud");
   const stats = document.getElementById("stats");
@@ -21,19 +24,19 @@ export function createHud() {
   sniperScope.id = "sniperScope";
   document.body.appendChild(sniperScope);
 
-  const isTouchDevice = window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+  const isTouchDevice = detectTouch();
 
   const buyMenu = document.createElement("div");
   buyMenu.id = "buyMenu";
   buyMenu.className = "cs-buy-menu";
   buyMenu.innerHTML = `
-    <div class="cs-buy-panel">
+    <div class="cs-buy-panel" role="dialog" aria-modal="true" aria-labelledby="buyMenuTitle">
       <div class="cs-buy-head">
         <div>
-          <div class="cs-buy-title">Buy Weapons</div>
-          <div class="cs-buy-subtitle">${isTouchDevice ? "Tap × or SHOP to close" : "Press B to close"}</div>
+          <div id="buyMenuTitle" class="cs-buy-title">Buy Weapons</div>
+          <div class="cs-buy-subtitle">${isTouchDevice ? "Tap × to close" : "1–6 select · Tab navigate · B / Esc close"}</div>
         </div>
-        <button id="buyMenuClose" class="cs-buy-close" type="button">×</button>
+        <button id="buyMenuClose" class="cs-buy-close" type="button" aria-label="Close weapon shop">×</button>
       </div>
       <div class="cs-buy-score">$<span id="buyMenuScore">0</span></div>
       <div id="buyMenuGrid" class="cs-buy-grid"></div>
@@ -45,6 +48,11 @@ export function createHud() {
   buyHint.id = "buyHint";
   buyHint.textContent = isTouchDevice ? "TAP SHOP TO BUY WEAPONS" : "PRESS B TO BUY WEAPONS";
   document.body.appendChild(buyHint);
+
+  const reloadStatus = document.createElement("div");
+  reloadStatus.id = "reloadStatus";
+  reloadStatus.setAttribute("role", "status");
+  document.body.appendChild(reloadStatus);
 
   const headshotMessage = document.createElement("div");
   headshotMessage.id = "headshotMessage";
@@ -135,6 +143,8 @@ export function createHud() {
     refs.health.textContent = state.health;
     refs.ammo.textContent = state.ammo;
     refs.reserve.textContent = state.reserveAmmo;
+    reloadStatus.textContent = state.isReloading ? "Reloading…" : state.ammo === 0 ? (state.reserveAmmo > 0 ? "Press R to reload" : "Out of ammo · Press B for the shop") : "";
+    reloadStatus.classList.toggle("visible", Boolean(reloadStatus.textContent));
     refs.score.textContent = state.score;
     refs.wave.textContent = state.wave;
     const waveScore = state.waveScore ?? 0;
@@ -148,10 +158,22 @@ export function createHud() {
     refs.ammo.closest(".cs-bottom-right").classList.toggle("danger", state.ammo <= 5);
   }
 
-  function updateBuyMenu({ score, weapons }) {
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  }
+
+  function updateBuyMenu({ score, weapons, isReloading = false }) {
+    const focused = document.activeElement;
+    const focusSlot = focused?.dataset?.buySelect;
+    const focusAmmo = focused?.dataset?.buyAmmo;
     buyMenuScore.textContent = score;
+    buyMenu.querySelector(".cs-buy-subtitle").textContent = isReloading
+      ? "Reloading… Weapon selection will be ready shortly."
+      : isTouchDevice ? "Tap × to close" : "1–6 select · Tab navigate · B / Esc close";
 
     buyMenuGrid.innerHTML = weapons.map(weapon => {
+      const safeName = escapeHtml(weapon.name);
+      const selectionLabel = weapon.active ? `${safeName}, equipped. Return to game` : weapon.owned ? `Equip ${safeName}` : `Buy ${safeName} for $${weapon.price}`;
       const canBuy = !weapon.owned && score >= weapon.price;
       const priceClass = canBuy ? "affordable" : "expensive";
       const ammoPrice = weapon.ammoPrice;
@@ -160,11 +182,11 @@ export function createHud() {
       const status = weapon.active
         ? '<span class="cs-buy-owned-text">ACTIVE</span>'
         : weapon.owned
-          ? '<span class="cs-buy-owned-text">OWNED</span>'
-          : `<span class="cs-buy-price ${priceClass}">BUY</span>`;
+          ? '<span class="cs-buy-owned-text">EQUIP</span>'
+          : `<span class="cs-buy-price ${priceClass}">${canBuy ? "BUY" : `NEED $${weapon.price - score}`}</span>`;
       const stateClass = weapon.active ? "active" : weapon.owned ? "owned" : canBuy ? "available" : "locked";
       const bottomAction = weapon.owned && !weapon.isMelee
-        ? `<button class="cs-buy-action ${ammoPriceClass}" data-buy-ammo="${weapon.id}" type="button" ${canBuyAmmo ? "" : "disabled"}>
+        ? `<button class="cs-buy-action ${ammoPriceClass}" data-buy-ammo="${weapon.id}" aria-label="Buy ${weapon.magazineSize} rounds for ${safeName}, $${ammoPrice}" type="button" ${canBuyAmmo ? "" : "disabled"}>
               <span class="cs-buy-price ${ammoPriceClass}">+ AMMO $${ammoPrice}</span>
            </button>`
         : !weapon.owned
@@ -175,20 +197,28 @@ export function createHud() {
 
       return `
         <div class="cs-buy-card ${stateClass}" data-buy-slot="${weapon.id}">
+          <button type="button" class="cs-buy-select" data-buy-select="${weapon.id}" aria-label="${selectionLabel}" ${(!weapon.owned && !canBuy) || (isReloading && !weapon.active) ? "disabled" : ""}></button>
           <span class="cs-buy-key">${weapon.id}</span>
-          <span class="cs-buy-name">${weapon.name}</span>
+          <span class="cs-buy-name">${safeName}</span>
           <span class="cs-buy-stats">${weapon.damage} DMG · ${weapon.magazineSize} MAG</span>
           <span class="cs-buy-status">${status}</span>
           ${bottomAction}
         </div>
       `;
     }).join("");
+    if (buyMenu.classList.contains("open") && (focusSlot || focusAmmo)) {
+      const target = focusAmmo
+        ? buyMenuGrid.querySelector(`[data-buy-ammo="${focusAmmo}"]:not(:disabled)`) || buyMenuGrid.querySelector(`[data-buy-select="${focusAmmo}"]:not(:disabled)`)
+        : buyMenuGrid.querySelector(`[data-buy-select="${focusSlot}"]:not(:disabled)`);
+      focusControl(target || buyMenuClose);
+    }
   }
 
   function showBuyMenu() {
     hideScope();
     buyMenu.classList.add("open");
     buyHint.classList.add("hidden");
+    focusMenu(buyMenu.querySelector(".cs-buy-panel"));
   }
 
   function hideBuyMenu() {

@@ -13,10 +13,10 @@
 </head>
 
 <body>
-<div id="preloader">
+<div id="preloader" aria-label="G55.CO game loading">
 <div class="preloader-panel">
 <div class="preloader-title">LOADING</div>
-<div class="preloader-bar">
+<div class="preloader-bar" role="progressbar" aria-label="Loading game" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
 <div id="preloaderFill"></div>
 </div>
 <div id="preloaderText">0%</div>
@@ -25,7 +25,7 @@
 <div id="hud">
 <div id="crosshair"></div>
 <div class="cs-topbar">
-<div class="cs-badge">ENEMIES <span id="enemiesLeft"></span></div>
+<div class="cs-badge">KILLS <span id="enemiesLeft"></span></div>
 <div class="cs-score">$<span id="score"></span></div>
 <div class="cs-round">WAVE <span id="wave"></span></div>
 </div>
@@ -45,13 +45,15 @@
 </div>
 </div>
 <div id="damageFlash"></div>
-<div id="overlay">
+<div id="overlay" role="dialog" aria-modal="true" aria-labelledby="panelTitle" aria-describedby="panelDescription">
 <div id="panel">
-<h1></h1>
-<p>Use WASD to move, mouse to aim, click to shoot, F for fullscreen.</p>
-<button id="startButton" class="cs-button">Start Game</button>
+<h1 id="panelTitle"></h1>
+<p id="panelDescription">Use WASD to move, mouse to aim, click to shoot, F for fullscreen.</p>
+<div class="menu-actions"><button id="startButton" class="cs-button" type="button" disabled>Loading 0%</button></div>
+<div class="menu-secondary"><button id="mainMenuButton" type="button" hidden>Main menu</button><button id="fullscreenButton" type="button">Fullscreen</button></div>
 </div>
 </div>
+<div id="uiStatus" role="status" aria-live="polite"></div>
 <script type="module" src="./main.js"></script>
 </body>
 </html>
