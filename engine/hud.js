@@ -44,6 +44,11 @@ export function createHud() {
   buyHint.textContent = "PRESS B TO BUY WEAPONS";
   document.body.appendChild(buyHint);
 
+  const headshotMessage = document.createElement("div");
+  headshotMessage.id = "headshotMessage";
+  headshotMessage.textContent = "HEADSHOT!";
+  document.body.appendChild(headshotMessage);
+
   const buyMenuGrid = buyMenu.querySelector("#buyMenuGrid");
   const buyMenuScore = buyMenu.querySelector("#buyMenuScore");
   const buyMenuClose = buyMenu.querySelector("#buyMenuClose");
@@ -91,6 +96,12 @@ export function createHud() {
     void crosshair.offsetWidth;
     crosshair.classList.add("fire");
     setTimeout(() => crosshair.classList.remove("fire"), 120);
+  }
+
+  function showHeadshot() {
+    headshotMessage.classList.remove("show");
+    void headshotMessage.offsetWidth;
+    headshotMessage.classList.add("show");
   }
 
   function showScope() {
@@ -185,6 +196,7 @@ export function createHud() {
   return {
     update,
     setCrosshairFire,
+    showHeadshot,
     showScope,
     hideScope,
     setScope,
