@@ -14,21 +14,6 @@ pellets: 1,
 spread: 0,
 isSniper: true
 },
-bulletCamera: {
-enabled: true,
-speed: 65,
-minDistance: 6,
-maxDistance: 140,
-fov: 58,
-chaseDistance: 0.9,
-chaseHeight: 0.18,
-sideOffset: 0.16,
-lookAhead: 2.5,
-trailLength: 1.8,
-impactHold: 0.08,
-enemyHitSlowMoScale: 0.18,
-enemyHitSlowMoDuration: 1.0
-},
 shellEject: {
 boneName: "tag_ads",
 },
