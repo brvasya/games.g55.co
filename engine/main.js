@@ -9,6 +9,9 @@ import { createSounds } from "./sounds.js";
 import { createImpactParticles } from "./impactParticles.js";
 import { createBulletHoles } from "./bulletHoles.js";
 
+const KILL_REWARD = 100;
+const HEADSHOT_REWARD = 50;
+
 export function bootGame({ GAME_CONFIG, GAME_ASSETS }) {
 const CONFIG = {
   ...GAME_CONFIG,
@@ -462,14 +465,11 @@ function getWaveEnemyLimit() {
 }
 
 function getKillScore({ headshot = false } = {}) {
-  const baseScore = 100;
-  const headshotBonus = Math.max(0, Number(CONFIG.headshot?.reward) || 0);
-
-  return baseScore + (headshot ? headshotBonus : 0);
+  return KILL_REWARD + (headshot ? HEADSHOT_REWARD : 0);
 }
 
 function shouldInstantKillHeadshot(hit) {
-  return Boolean(hit?.headshot && CONFIG.headshot?.instantKill !== false);
+  return Boolean(hit?.headshot);
 }
 
 function startWave() {
