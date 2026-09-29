@@ -201,6 +201,10 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     rotateView(deltaX, deltaY, config.dragSensitivity * sensitivityMultiplier);
   }
 
+  function setFiring(active) {
+    inputState.mouseDown = Boolean(active);
+  }
+
   function setTouchMove(x = 0, y = 0) {
     touchInput.moveX = THREE.MathUtils.clamp(x, -1, 1);
     touchInput.moveY = THREE.MathUtils.clamp(y, -1, 1);
@@ -307,10 +311,11 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     if (moveForward !== 0) wishDirection.addScaledVector(forward, moveForward);
     if (moveRight !== 0) wishDirection.addScaledVector(side, -moveRight);
 
-    const hasInput = wishDirection.lengthSq() > 0;
+    const inputStrength = Math.min(1, wishDirection.length());
+    const hasInput = inputStrength > 0;
     if (hasInput) wishDirection.normalize();
 
-    const maxSpeed = keys.walking ? MOVE_TUNING.maxWalkSpeed : MOVE_TUNING.maxGroundSpeed;
+    const maxSpeed = (keys.walking ? MOVE_TUNING.maxWalkSpeed : MOVE_TUNING.maxGroundSpeed) * inputStrength;
     const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
 
     if (grounded) {
@@ -553,6 +558,7 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     onMouseMove,
     addLookDelta,
     setTouchMove,
+    setFiring,
     queueJump,
     clearMovement,
     reset,

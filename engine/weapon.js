@@ -20,6 +20,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   let currentSlotIndex = 0;
   let lastShotTime = 0;
   let isReloading = false;
+  let reloadStartedAt = 0;
+  let reloadDuration = 0;
 
   const rig = new THREE.Group();
   const modelCache = new Map();
@@ -245,7 +247,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     const index = slotNumber - 1;
     const slot = slots[index];
 
-    if (!slot.owned || index === currentSlotIndex || isReloading) return false;
+    if (!slot || !slot.owned || index === currentSlotIndex || isReloading) return false;
 
     currentSlotIndex = index;
     lastShotTime = 0;
@@ -363,6 +365,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
     isReloading = true;
     const duration = play("reload");
+    reloadStartedAt = performance.now();
+    reloadDuration = duration;
 
     clearTimeout(reloadTimer);
     reloadTimer = setTimeout(() => {
@@ -403,6 +407,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
       ammo: slot.ammo,
       reserveAmmo: slot.reserveAmmo,
       isReloading,
+      magazineSize: slot.magazineSize,
+      reloadProgress: isReloading ? Math.min(1, (performance.now() - reloadStartedAt) / Math.max(1, reloadDuration)) : 0,
       isMelee: slot.isMelee
     };
   }

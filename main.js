@@ -41,7 +41,7 @@ function renderMainMenuTitle(title) {
 renderMainMenuTitle(GAME_CONFIG.gameTitle);
 const isTouchDevice = window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
 panelText.textContent = isTouchDevice
-  ? "Left stick move  ·  Right stick look  ·  Fire / Scope / Reload / Shop"
+  ? "Left stick move  ·  Swipe right side to aim  ·  Hold + drag Fire  ·  Tap weapon to switch"
   : "WASD move  ·  Mouse aim  ·  LMB fire  ·  RMB scope  ·  R reload";
 
 document.body.classList.add("main-menu-active");
