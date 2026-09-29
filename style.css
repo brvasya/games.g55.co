@@ -851,3 +851,478 @@ button.cs-buy-action:disabled { opacity: 0.45; cursor: default; }
   .cs-buy-stats,
   .cs-buy-action { font-size: 9px; }
 }
+
+
+/* Main menu — live scene, left-aligned modern FPS layout.
+   External preloader selectors are intentionally untouched. */
+body.main-menu-active #hud {
+  opacity: 0;
+}
+
+body.main-menu-active canvas {
+  transform-origin: 50% 50%;
+  animation: menu-scene-drift 12s ease-in-out infinite alternate;
+}
+
+#overlay.main-menu {
+  place-items: center start;
+  padding:
+    clamp(28px, 6vh, 72px)
+    clamp(24px, 7vw, 108px);
+  text-align: left;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(3, 7, 10, 0.94) 0%,
+      rgba(3, 7, 10, 0.78) 27%,
+      rgba(3, 7, 10, 0.42) 50%,
+      rgba(3, 7, 10, 0.10) 76%,
+      rgba(3, 7, 10, 0.02) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.26) 0%,
+      transparent 36%,
+      rgba(0, 0, 0, 0.28) 100%
+    );
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+#overlay.main-menu #panel {
+  width: min(680px, 88vw);
+  padding: 0;
+  overflow: visible;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: menu-panel-in 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+#overlay.main-menu #panel::before {
+  left: 0;
+  right: auto;
+  top: -20px;
+  width: 64px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--ui-accent-bright);
+  box-shadow: 0 0 22px rgba(89, 210, 255, 0.35);
+  opacity: 1;
+}
+
+#overlay.main-menu h1 {
+  max-width: 760px;
+  margin: 0 0 18px;
+  color: #fff;
+  font-size: clamp(46px, 7.2vw, 88px);
+  font-weight: 700;
+  line-height: 0.94;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  text-wrap: balance;
+  text-shadow:
+    0 4px 30px rgba(0, 0, 0, 0.54),
+    0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+#overlay.main-menu p {
+  max-width: none;
+  margin: 0 0 22px;
+  color: rgba(242, 247, 250, 0.68);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+#overlay.main-menu .cs-button {
+  min-height: 52px;
+  margin-top: 0;
+  border-radius: 10px;
+}
+
+#overlay.main-menu #startButton {
+  min-width: 252px;
+  padding: 0 26px;
+  justify-content: space-between;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+}
+
+#overlay.main-menu #startButton::after {
+  content: "→";
+  margin-left: 28px;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  transform: translateX(0);
+  transition: transform 120ms ease;
+}
+
+#overlay.main-menu #startButton:hover::after {
+  transform: translateX(4px);
+}
+
+#overlay.main-menu #moreGamesButton {
+  min-width: 154px;
+  margin-left: 10px;
+  padding: 0 20px;
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(5, 9, 13, 0.44);
+  color: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#overlay.main-menu #moreGamesButton:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+@keyframes menu-panel-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-22px, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes menu-scene-drift {
+  0% {
+    transform: scale(1.035) translate3d(-0.35%, -0.15%, 0);
+  }
+  100% {
+    transform: scale(1.055) translate3d(0.45%, 0.18%, 0);
+  }
+}
+
+@media (max-width: 700px) {
+  #overlay.main-menu {
+    place-items: end start;
+    padding: 28px 20px 34px;
+    background:
+      linear-gradient(
+        180deg,
+        rgba(2, 5, 8, 0.18) 0%,
+        rgba(2, 5, 8, 0.52) 44%,
+        rgba(2, 5, 8, 0.96) 100%
+      );
+  }
+
+  #overlay.main-menu #panel {
+    width: 100%;
+  }
+
+  #overlay.main-menu h1 {
+    margin-bottom: 14px;
+    font-size: clamp(38px, 12vw, 58px);
+  }
+
+  #overlay.main-menu p {
+    margin-bottom: 16px;
+    font-size: 9px;
+  }
+
+  #overlay.main-menu #startButton,
+  #overlay.main-menu #moreGamesButton {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin-left: 0;
+  }
+
+  #overlay.main-menu #startButton {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  #overlay.main-menu #startButton::after {
+    flex: 0 0 auto;
+    margin-left: 14px;
+  }
+
+  #overlay.main-menu #moreGamesButton {
+    margin-top: 9px;
+  }
+}
+
+@media (max-width: 420px) {
+  #overlay.main-menu {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  #overlay.main-menu #panel {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #overlay.main-menu #startButton {
+    min-height: 50px;
+    padding-left: 16px;
+    padding-right: 14px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+
+  #overlay.main-menu #startButton::after {
+    margin-left: 10px;
+    font-size: 18px;
+  }
+
+  #overlay.main-menu #moreGamesButton {
+    min-height: 48px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.main-menu-active canvas,
+  #overlay.main-menu #panel {
+    animation: none;
+  }
+}
+
+
+/* Narrow-screen modal centering fix.
+   Panels size against the padded overlay content area, not 100vw.
+   External preloader styles remain untouched. */
+.cs-buy-panel {
+  width: min(940px, 100%);
+  margin-inline: auto;
+}
+
+@media (max-width: 760px) {
+  #overlay:not(.main-menu) {
+    place-items: center;
+    padding: 14px;
+  }
+
+  #overlay:not(.main-menu) #panel {
+    width: min(520px, 100%);
+    max-width: 100%;
+    margin-inline: auto;
+  }
+
+  /* Pause / wave / game-over actions use one consistent width. */
+  #overlay:not(.main-menu) #startButton,
+  #overlay:not(.main-menu) #moreGamesButton {
+    display: flex;
+    width: min(320px, 100%);
+    max-width: 100%;
+    min-width: 0;
+    margin-left: auto !important;
+    margin-right: auto;
+  }
+
+  #overlay:not(.main-menu) #moreGamesButton {
+    margin-top: 9px;
+  }
+
+  .cs-buy-menu {
+    place-items: center;
+    padding: 10px;
+  }
+
+  .cs-buy-panel {
+    width: 100%;
+    max-width: 940px;
+    max-height: calc(100dvh - 20px);
+    margin: auto;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 420px) {
+  #overlay:not(.main-menu) {
+    padding: 10px;
+  }
+
+  #overlay:not(.main-menu) #panel {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .cs-buy-menu {
+    padding: 8px;
+  }
+
+  .cs-buy-panel {
+    max-height: calc(100dvh - 16px);
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .cs-buy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* Exact narrow-screen action-button sizing for pause/wave/game-over overlays. */
+@media (max-width: 760px) {
+  #overlay:not(.main-menu) #startButton,
+  #overlay:not(.main-menu) #moreGamesButton {
+    display: flex;
+    width: 100%;
+    max-width: 320px;
+    min-width: 0;
+    min-height: 52px;
+    box-sizing: border-box;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: 20px;
+    padding-right: 20px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #overlay:not(.main-menu) #moreGamesButton {
+    margin-top: 9px;
+  }
+}
+
+
+/* No-scrollbar UI rule: menus must fit inside the viewport. */
+.cs-buy-menu,
+.cs-buy-panel,
+#overlay,
+#panel {
+  scrollbar-width: none;
+}
+
+.cs-buy-panel {
+  overflow: hidden;
+}
+
+@media (max-height: 560px) {
+  .cs-buy-menu {
+    padding: 8px;
+  }
+
+  .cs-buy-panel {
+    width: min(940px, 100%);
+    max-height: calc(100dvh - 16px);
+    padding: 10px 12px;
+    overflow: hidden;
+  }
+
+  .cs-buy-head {
+    margin-bottom: 5px;
+  }
+
+  .cs-buy-title {
+    font-size: 19px;
+  }
+
+  .cs-buy-subtitle {
+    display: none;
+  }
+
+  .cs-buy-close {
+    width: 32px;
+    height: 32px;
+    font-size: 22px;
+  }
+
+  .cs-buy-score {
+    min-height: 25px;
+    margin-bottom: 6px;
+    padding: 0 9px;
+    font-size: 14px;
+  }
+
+  .cs-buy-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .cs-buy-card {
+    min-height: 86px;
+    padding: 8px 9px;
+    gap: 2px;
+  }
+
+  .cs-buy-name {
+    font-size: 12px;
+  }
+
+  .cs-buy-status {
+    font-size: 13px;
+  }
+
+  .cs-buy-stats,
+  .cs-buy-action {
+    font-size: 8px;
+  }
+}
+
+@media (max-height: 430px) {
+  .cs-buy-panel {
+    padding: 7px 9px;
+  }
+
+  .cs-buy-head {
+    margin-bottom: 3px;
+  }
+
+  .cs-buy-title {
+    font-size: 17px;
+  }
+
+  .cs-buy-score {
+    min-height: 22px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .cs-buy-grid {
+    gap: 4px;
+  }
+
+  .cs-buy-card {
+    min-height: 70px;
+    padding: 6px 7px;
+    gap: 1px;
+  }
+
+  .cs-buy-stats {
+    display: none;
+  }
+
+  .cs-buy-name {
+    font-size: 11px;
+  }
+
+  .cs-buy-status {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) and (min-height: 561px) {
+  .cs-buy-panel {
+    padding: 10px;
+  }
+
+  .cs-buy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .cs-buy-card {
+    min-height: 96px;
+    padding: 9px;
+    gap: 3px;
+  }
+}
