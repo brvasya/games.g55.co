@@ -495,6 +495,8 @@ function refillActiveEnemies() {
 function handleEnemyKilled({ headshot = false } = {}) {
   const points = getKillScore({ headshot });
 
+  if (headshot) hud.showHeadshot();
+
   state.score += points;
   state.waveScore += 1;
 
@@ -656,8 +658,7 @@ function shoot() {
     if (hit?.type === "enemy") {
       const headshot = Boolean(hit.headshot);
       const killed = enemies.damageEnemy(hit.enemy, shot.damage, {
-        instantKill: shouldInstantKillHeadshot(hit),
-        headshot
+        instantKill: shouldInstantKillHeadshot(hit)
       });
 
       impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
