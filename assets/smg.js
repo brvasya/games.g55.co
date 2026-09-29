@@ -17,9 +17,9 @@ shellEject: {
 boneName: "j_bolt",
 },
 anim: {
-idle: [0, 0],
-shoot: [0, 12],
-reload: [15, 242]
+idle: "idle",
+shoot: "shoot",
+reload: "reload"
 },
 model: "./assets/smg.glb",
 fireSound: "./assets/smg.ogg"

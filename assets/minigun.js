@@ -17,9 +17,9 @@ shellEject: {
 boneName: "tag_clip",
 },
 anim: {
-idle: [0, 0],
-shoot: [0, 7],
-reload: [10, 260]
+idle: "idle",
+shoot: "shoot",
+reload: "reload"
 },
 model: "./assets/minigun.glb",
 fireSound: "./assets/minigun.ogg"

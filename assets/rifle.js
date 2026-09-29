@@ -17,9 +17,9 @@ shellEject: {
 boneName: "tag_bullet",
 },
 anim: {
-idle: [0, 0],
-shoot: [0, 15],
-reload: [20, 230]
+idle: "idle",
+shoot: "shoot",
+reload: "reload"
 },
 model: "./assets/rifle.glb",
 fireSound: "./assets/rifle.ogg"

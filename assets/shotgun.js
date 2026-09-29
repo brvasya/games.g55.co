@@ -17,9 +17,9 @@ shellEject: {
 boneName: "tag_weapon",
 },
 anim: {
-idle: [0, 0],
-shoot: [0, 20],
-reload: [25, 70]
+idle: "idle",
+shoot: "shoot",
+reload: "reload"
 },
 model: "./assets/shotgun.glb",
 fireSound: "./assets/shotgun.ogg"

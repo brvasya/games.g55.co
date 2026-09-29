@@ -18,9 +18,9 @@ shellEject: {
 boneName: "tag_ads",
 },
 anim: {
-idle: [0, 0],
-shoot: [0, 27],
-reload: [30, 275]
+idle: "idle",
+shoot: "shoot",
+reload: "reload"
 },
 model: "./assets/sniper.glb",
 fireSound: "./assets/sniper.ogg"
