@@ -140,6 +140,9 @@ const sniperBulletCam = {
   cameraPosition: new THREE.Vector3(),
   lookTarget: new THREE.Vector3(),
   right: new THREE.Vector3(),
+  orbitUp: new THREE.Vector3(),
+  cameraUp: new THREE.Vector3(),
+  impactPoint: new THREE.Vector3(),
   speed: 65,
   distance: 0,
   traveled: 0,
@@ -148,14 +151,34 @@ const sniperBulletCam = {
   sideOffset: 0.16,
   lookAhead: 2.5,
   trailLength: 1.8,
+
+  // Flight camera.
+  fovStart: 46,
+  fovFlight: 55,
+  fovImpact: 36,
+  headshotFovImpact: 32,
+  orbitAngle: 0,
+  orbitSpeed: 0.45,
+  orbitRadius: 0.22,
+  orbitHeight: 0.08,
+  maxRoll: 0.05,
+
+  // Impact camera / slow motion.
   impactTimer: 0,
+  impactDuration: 0,
   impactHold: 0.08,
+  impactAngle: 0,
+  impactDistance: 1.75,
+  impactOrbitSpeed: 0.7,
+  impactOrbitRadius: 0.5,
+  impactOrbitHeight: 0.12,
   enemyImpact: false,
   enemyHitSlowMoScale: 0.18,
   enemyHitSlowMoDuration: 1.0
 };
 const sniperBulletAxis = new THREE.Vector3(0, 1, 0);
 const sniperBulletWorldUp = new THREE.Vector3(0, 1, 0);
+const sniperBulletRollQuat = new THREE.Quaternion();
 
 const cameraShake = {
   trauma: 0,
@@ -895,11 +918,28 @@ function startSniperBulletCamera(shot, direction, hit, config = {}) {
   sniperBulletCam.sideOffset = Number(config.sideOffset) || 0.16;
   sniperBulletCam.lookAhead = Math.max(0.25, Number(config.lookAhead) || 2.5);
   sniperBulletCam.trailLength = Math.max(0.1, Number(config.trailLength) || 1.8);
+
+  sniperBulletCam.fovStart = clampSniperFov(config.fovStart, 46);
+  sniperBulletCam.fovFlight = clampSniperFov(config.fovFlight, 55);
+  sniperBulletCam.fovImpact = clampSniperFov(config.fovImpact, 36);
+  sniperBulletCam.headshotFovImpact = clampSniperFov(config.headshotFovImpact, 32);
+  sniperBulletCam.orbitAngle = 0;
+  sniperBulletCam.orbitSpeed = Math.max(0, Number(config.orbitSpeed) || 0.45);
+  sniperBulletCam.orbitRadius = Math.max(0, Number(config.orbitRadius) || 0.22);
+  sniperBulletCam.orbitHeight = Math.max(0, Number(config.orbitHeight) || 0.08);
+  sniperBulletCam.maxRoll = Math.max(0, Math.min(0.18, Number(config.maxRoll) || 0.05));
+
   sniperBulletCam.impactHold = Math.max(0, Number(config.impactHold) || 0.08);
+  sniperBulletCam.impactDistance = Math.max(0.75, Number(config.impactDistance) || 1.75);
+  sniperBulletCam.impactOrbitSpeed = Math.max(0, Number(config.impactOrbitSpeed) || 0.7);
+  sniperBulletCam.impactOrbitRadius = Math.max(0, Number(config.impactOrbitRadius) || 0.5);
+  sniperBulletCam.impactOrbitHeight = Math.max(0, Number(config.impactOrbitHeight) || 0.12);
   sniperBulletCam.enemyHitSlowMoScale = Math.max(0.03, Math.min(1, Number(config.enemyHitSlowMoScale) || 0.18));
   sniperBulletCam.enemyHitSlowMoDuration = Math.max(0, Number(config.enemyHitSlowMoDuration) || 1.0);
   sniperBulletCam.enemyImpact = false;
   sniperBulletCam.impactTimer = 0;
+  sniperBulletCam.impactDuration = 0;
+  sniperBulletCam.impactAngle = 0;
 
   sniperBulletCam.origin.copy(camera.position);
   sniperBulletCam.direction.copy(direction).normalize();
@@ -912,7 +952,7 @@ function startSniperBulletCamera(shot, direction, hit, config = {}) {
   sniperBulletCam.projectile.position.copy(sniperBulletCam.position);
   sniperBulletCam.projectile.quaternion.setFromUnitVectors(sniperBulletAxis, sniperBulletCam.direction);
 
-  sniperBulletCamera.fov = Math.max(25, Math.min(90, Number(config.fov) || 58));
+  sniperBulletCamera.fov = sniperBulletCam.fovStart;
   sniperBulletCamera.updateProjectionMatrix();
 
   positionSniperBulletCamera(true);
@@ -920,6 +960,11 @@ function startSniperBulletCamera(shot, direction, hit, config = {}) {
   hud.hideScope();
 
   return true;
+}
+
+function clampSniperFov(value, fallback) {
+  const parsed = Number(value);
+  return Math.max(20, Math.min(90, Number.isFinite(parsed) ? parsed : fallback));
 }
 
 function ensureSniperBulletVisuals() {
@@ -959,6 +1004,7 @@ function updateSniperBulletCamera(delta) {
   if (!sniperBulletCam.active) return;
 
   if (sniperBulletCam.phase === "impact") {
+    updateSniperImpactCamera(delta);
     sniperBulletCam.impactTimer -= delta;
 
     if (sniperBulletCam.impactTimer <= 0) {
@@ -1000,9 +1046,12 @@ function updateSniperBulletCamera(delta) {
 
   sniperBulletCam.phase = "impact";
   sniperBulletCam.enemyImpact = Boolean(result.enemyWasHit);
-  sniperBulletCam.impactTimer = sniperBulletCam.enemyImpact
+  sniperBulletCam.impactDuration = sniperBulletCam.enemyImpact
     ? Math.max(sniperBulletCam.impactHold, sniperBulletCam.enemyHitSlowMoDuration)
     : sniperBulletCam.impactHold;
+  sniperBulletCam.impactTimer = sniperBulletCam.impactDuration;
+  sniperBulletCam.impactAngle = sniperBulletCam.orbitAngle;
+  sniperBulletCam.impactPoint.copy(sniperBulletCam.hit?.point ?? sniperBulletCam.position);
 
   if (sniperBulletCam.impactTimer <= 0) {
     finishSniperBulletCamera();
@@ -1038,6 +1087,43 @@ function updateSniperEnemyImpactSlowMotion(delta) {
 }
 
 function positionSniperBulletCamera(immediate = false, delta = 0) {
+  buildSniperCameraBasis();
+
+  if (!immediate) {
+    sniperBulletCam.orbitAngle += delta * sniperBulletCam.orbitSpeed;
+  }
+
+  const orbitSide = Math.cos(sniperBulletCam.orbitAngle) * sniperBulletCam.orbitRadius;
+  const orbitLift = Math.sin(sniperBulletCam.orbitAngle) * sniperBulletCam.orbitHeight;
+
+  sniperBulletCam.cameraPosition
+    .copy(sniperBulletCam.position)
+    .addScaledVector(sniperBulletCam.direction, -sniperBulletCam.chaseDistance)
+    .addScaledVector(sniperBulletCam.orbitUp, sniperBulletCam.chaseHeight + orbitLift)
+    .addScaledVector(sniperBulletCam.right, sniperBulletCam.sideOffset + orbitSide);
+
+  if (immediate) {
+    sniperBulletCamera.position.copy(sniperBulletCam.cameraPosition);
+  } else {
+    const blend = 1 - Math.exp(-12 * Math.max(delta, 0));
+    sniperBulletCamera.position.lerp(sniperBulletCam.cameraPosition, blend);
+  }
+
+  sniperBulletCam.lookTarget
+    .copy(sniperBulletCam.position)
+    .addScaledVector(sniperBulletCam.direction, sniperBulletCam.lookAhead);
+
+  const roll = Math.sin(sniperBulletCam.orbitAngle) * sniperBulletCam.maxRoll;
+  sniperBulletRollQuat.setFromAxisAngle(sniperBulletCam.direction, roll);
+  sniperBulletCam.cameraUp.copy(sniperBulletCam.orbitUp).applyQuaternion(sniperBulletRollQuat).normalize();
+
+  sniperBulletCamera.up.copy(sniperBulletCam.cameraUp);
+  sniperBulletCamera.lookAt(sniperBulletCam.lookTarget);
+
+  updateSniperFlightFov(delta, immediate);
+}
+
+function buildSniperCameraBasis() {
   sniperBulletCam.right.crossVectors(sniperBulletCam.direction, sniperBulletWorldUp);
 
   if (sniperBulletCam.right.lengthSq() < 0.0001) {
@@ -1046,25 +1132,105 @@ function positionSniperBulletCamera(immediate = false, delta = 0) {
     sniperBulletCam.right.normalize();
   }
 
-  sniperBulletCam.cameraPosition
-    .copy(sniperBulletCam.position)
-    .addScaledVector(sniperBulletCam.direction, -sniperBulletCam.chaseDistance)
-    .addScaledVector(sniperBulletWorldUp, sniperBulletCam.chaseHeight)
-    .addScaledVector(sniperBulletCam.right, sniperBulletCam.sideOffset);
+  sniperBulletCam.orbitUp.crossVectors(sniperBulletCam.right, sniperBulletCam.direction);
 
-  if (immediate) {
-    sniperBulletCamera.position.copy(sniperBulletCam.cameraPosition);
+  if (sniperBulletCam.orbitUp.lengthSq() < 0.0001) {
+    sniperBulletCam.orbitUp.copy(sniperBulletWorldUp);
   } else {
-    const blend = 1 - Math.exp(-18 * Math.max(delta, 0));
-    sniperBulletCamera.position.lerp(sniperBulletCam.cameraPosition, blend);
+    sniperBulletCam.orbitUp.normalize();
+  }
+}
+
+function updateSniperFlightFov(delta, immediate = false) {
+  const progress = sniperBulletCam.distance > 0
+    ? THREE.MathUtils.clamp(sniperBulletCam.traveled / sniperBulletCam.distance, 0, 1)
+    : 1;
+
+  let targetFov;
+
+  if (progress < 0.7) {
+    targetFov = THREE.MathUtils.lerp(
+      sniperBulletCam.fovStart,
+      sniperBulletCam.fovFlight,
+      progress / 0.7
+    );
+  } else {
+    targetFov = THREE.MathUtils.lerp(
+      sniperBulletCam.fovFlight,
+      sniperBulletCam.fovImpact,
+      (progress - 0.7) / 0.3
+    );
   }
 
-  sniperBulletCam.lookTarget
-    .copy(sniperBulletCam.position)
-    .addScaledVector(sniperBulletCam.direction, sniperBulletCam.lookAhead);
+  const nextFov = immediate
+    ? targetFov
+    : THREE.MathUtils.lerp(
+        sniperBulletCamera.fov,
+        targetFov,
+        1 - Math.exp(-8 * Math.max(delta, 0))
+      );
 
-  sniperBulletCamera.up.copy(sniperBulletWorldUp);
+  if (Math.abs(nextFov - sniperBulletCamera.fov) > 0.01) {
+    sniperBulletCamera.fov = nextFov;
+    sniperBulletCamera.updateProjectionMatrix();
+  }
+}
+
+function updateSniperImpactCamera(delta) {
+  buildSniperCameraBasis();
+
+  const duration = Math.max(0.0001, sniperBulletCam.impactDuration);
+  const progress = THREE.MathUtils.clamp(
+    1 - sniperBulletCam.impactTimer / duration,
+    0,
+    1
+  );
+  const eased = progress * progress * (3 - 2 * progress);
+
+  sniperBulletCam.impactAngle += delta * sniperBulletCam.impactOrbitSpeed;
+
+  // Pull the camera back on impact instead of pushing it into the enemy.
+  const impactDistance = THREE.MathUtils.lerp(
+    sniperBulletCam.chaseDistance,
+    sniperBulletCam.impactDistance,
+    0.35 + 0.65 * eased
+  );
+  const orbitRadius = sniperBulletCam.impactOrbitRadius * (0.75 + 0.25 * eased);
+  const orbitSide = Math.cos(sniperBulletCam.impactAngle) * orbitRadius;
+  const orbitLift = Math.sin(sniperBulletCam.impactAngle) * sniperBulletCam.impactOrbitHeight;
+
+  sniperBulletCam.cameraPosition
+    .copy(sniperBulletCam.impactPoint)
+    .addScaledVector(sniperBulletCam.direction, -impactDistance)
+    .addScaledVector(sniperBulletCam.orbitUp, sniperBulletCam.chaseHeight + orbitLift)
+    .addScaledVector(sniperBulletCam.right, orbitSide);
+
+  const blend = 1 - Math.exp(-7 * Math.max(delta, 0));
+  sniperBulletCamera.position.lerp(sniperBulletCam.cameraPosition, blend);
+
+  sniperBulletCam.lookTarget.copy(sniperBulletCam.impactPoint);
+
+  const roll = Math.sin(sniperBulletCam.impactAngle) * sniperBulletCam.maxRoll * 0.45;
+  sniperBulletRollQuat.setFromAxisAngle(sniperBulletCam.direction, roll);
+  sniperBulletCam.cameraUp.copy(sniperBulletCam.orbitUp).applyQuaternion(sniperBulletRollQuat).normalize();
+
+  sniperBulletCamera.up.copy(sniperBulletCam.cameraUp);
   sniperBulletCamera.lookAt(sniperBulletCam.lookTarget);
+
+  const impactFov = sniperBulletCam.hit?.headshot
+    ? sniperBulletCam.headshotFovImpact
+    : sniperBulletCam.fovImpact;
+  const targetFov = THREE.MathUtils.lerp(sniperBulletCam.fovImpact, impactFov, eased);
+  const nextFov = THREE.MathUtils.lerp(
+    sniperBulletCamera.fov,
+    targetFov,
+    1 - Math.exp(-7 * Math.max(delta, 0))
+  );
+
+  if (Math.abs(nextFov - sniperBulletCamera.fov) > 0.01) {
+    sniperBulletCamera.fov = nextFov;
+    sniperBulletCamera.updateProjectionMatrix();
+  }
 }
 
 function updateSniperBulletTrail() {
@@ -1093,6 +1259,7 @@ function finishSniperBulletCamera() {
   sniperBulletCam.shot = null;
   sniperBulletCam.hit = null;
   sniperBulletCam.impactTimer = 0;
+  sniperBulletCam.impactDuration = 0;
   sniperBulletCam.enemyImpact = false;
 
   if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
@@ -1109,6 +1276,7 @@ function cancelSniperBulletCamera() {
   sniperBulletCam.shot = null;
   sniperBulletCam.hit = null;
   sniperBulletCam.impactTimer = 0;
+  sniperBulletCam.impactDuration = 0;
   sniperBulletCam.enemyImpact = false;
 
   if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
