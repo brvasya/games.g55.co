@@ -342,6 +342,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
       damage: slot.damage,
       spread: slot.spread,
       pellets: slot.pellets,
+      isSniper: slot.isSniper,
       isMelee: false,
       range: slot.range,
       ammo: slot.ammo,

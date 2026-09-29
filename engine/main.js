@@ -125,6 +125,38 @@ const bulletHoles = createBulletHoles({ THREE, scene });
 
 const impactRaycaster = new THREE.Raycaster();
 
+const sniperBulletCamera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.01, 1000);
+const sniperBulletCam = {
+  active: false,
+  phase: "idle",
+  shot: null,
+  hit: null,
+  projectile: null,
+  trail: null,
+  trailPositions: null,
+  origin: new THREE.Vector3(),
+  direction: new THREE.Vector3(),
+  position: new THREE.Vector3(),
+  cameraPosition: new THREE.Vector3(),
+  lookTarget: new THREE.Vector3(),
+  right: new THREE.Vector3(),
+  speed: 65,
+  distance: 0,
+  traveled: 0,
+  chaseDistance: 0.9,
+  chaseHeight: 0.18,
+  sideOffset: 0.16,
+  lookAhead: 2.5,
+  trailLength: 1.8,
+  impactTimer: 0,
+  impactHold: 0.08,
+  enemyImpact: false,
+  enemyHitSlowMoScale: 0.18,
+  enemyHitSlowMoDuration: 1.0
+};
+const sniperBulletAxis = new THREE.Vector3(0, 1, 0);
+const sniperBulletWorldUp = new THREE.Vector3(0, 1, 0);
+
 const cameraShake = {
   trauma: 0,
   time: 0,
@@ -294,7 +326,10 @@ function setupInput() {
     player.onMouseUp(e);
   });
 
-  document.addEventListener("mousemove", e => player.onMouseMove(e));
+  document.addEventListener("mousemove", e => {
+    if (sniperBulletCam.active) return;
+    player.onMouseMove(e);
+  });
   document.addEventListener("contextmenu", e => e.preventDefault());
   document.addEventListener("pointerlockchange", onPointerLockChange);
   document.addEventListener("pointerlockerror", enableFallbackLook);
@@ -341,6 +376,7 @@ async function startGame() {
 function pauseGame() {
   if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
 
+  cancelSniperBulletCamera();
   stopZoom();
   state.isPlaying = false;
   player.clearMovement();
@@ -355,7 +391,7 @@ function pauseGame() {
 }
 
 function toggleBuyMenu() {
-  if (state.isGameOver || state.isWaveComplete) return;
+  if (sniperBulletCam.active || state.isGameOver || state.isWaveComplete) return;
 
   if (state.isBuyMenuOpen) {
     closeBuyMenu(true);
@@ -367,6 +403,7 @@ function toggleBuyMenu() {
 function openBuyMenu() {
   if (!state.isPlaying || state.isGameOver || state.isWaveComplete) return;
 
+  cancelSniperBulletCamera();
   stopZoom();
   state.isPlaying = false;
   state.isBuyMenuOpen = true;
@@ -513,6 +550,7 @@ function handleEnemyKilled({ headshot = false } = {}) {
 }
 
 function showWaveComplete() {
+  cancelSniperBulletCamera();
   stopZoom();
   state.isPlaying = false;
   state.isWaveComplete = true;
@@ -565,7 +603,7 @@ function enableFallbackLook() {
 }
 
 function startZoom() {
-  if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
+  if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
 
   const asset = weapon.getCurrentAsset();
   if (!asset.behavior.isSniper) return;
@@ -590,7 +628,7 @@ function stopZoom() {
 }
 
 function switchWeapon(slotNumber) {
-  if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
+  if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
 
   const slot = weapon.getShopState().find(item => item.id === slotNumber);
 
@@ -624,7 +662,7 @@ function updateHud() {
 }
 
 function shoot() {
-  if (!enemies || state.isWaveComplete || state.isBuyMenuOpen) return;
+  if (!enemies || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active) return;
 
   const shot = weapon.shoot();
 
@@ -649,6 +687,30 @@ function shoot() {
   if (!isZooming) hud.setCrosshairFire();
 
   const pelletCount = Math.max(1, shot.pellets ?? 1);
+
+  // Sniper bullet camera is scoped-only. Unscoped sniper shots stay hitscan.
+  // Scoped shots use a delayed projectile/cinematic camera when there is
+  // enough travel distance. The hit is resolved only when the bullet arrives.
+  if (shot.isSniper && isZooming && pelletCount === 1) {
+    const direction = getShotDirection(shot.spread);
+    const bulletConfig = weapon.getCurrentAsset().bulletCamera ?? {};
+    const maxDistance = Math.max(1, Number(bulletConfig.maxDistance) || 140);
+    const hit = getBulletHit(direction, maxDistance);
+
+    if (startSniperBulletCamera(shot, direction, hit, bulletConfig)) {
+      updateHud();
+      return;
+    }
+
+    spawnTracer(direction);
+    const result = resolveBulletImpact(shot, hit);
+
+    if (!state.isWaveComplete) refillActiveEnemies();
+    if (result.enemyWasHit) sounds.playEnemyHit();
+    updateHud();
+    return;
+  }
+
   let enemyWasHit = false;
 
   for (let i = 0; i < pelletCount; i++) {
@@ -657,26 +719,10 @@ function shoot() {
     spawnTracer(direction);
 
     const hit = getBulletHit(direction);
+    const result = resolveBulletImpact(shot, hit);
+    enemyWasHit ||= result.enemyWasHit;
 
-    if (hit?.type === "enemy") {
-      const headshot = Boolean(hit.headshot);
-      const killed = enemies.damageEnemy(hit.enemy, shot.damage, {
-        instantKill: shouldInstantKillHeadshot(hit),
-        headshot
-      });
-
-      impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
-      enemyWasHit = true;
-
-      if (killed) {
-        sounds.playEnemyDie();
-
-        if (handleEnemyKilled({ headshot })) break;
-      }
-    } else if (hit?.type === "surface") {
-      impacts.spawnSurface(hit.point, hit.normal);
-      bulletHoles.spawn(hit.point, hit.normal);
-    }
+    if (result.waveComplete) break;
   }
 
   if (!state.isWaveComplete) refillActiveEnemies();
@@ -686,6 +732,35 @@ function shoot() {
   }
 
   updateHud();
+}
+
+function resolveBulletImpact(shot, hit) {
+  if (hit?.type === "enemy") {
+    const headshot = Boolean(hit.headshot);
+    const killed = enemies.damageEnemy(hit.enemy, shot.damage, {
+      instantKill: shouldInstantKillHeadshot(hit),
+      headshot
+    });
+
+    impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
+
+    if (killed) {
+      sounds.playEnemyDie();
+      return {
+        enemyWasHit: true,
+        waveComplete: handleEnemyKilled({ headshot })
+      };
+    }
+
+    return { enemyWasHit: true, waveComplete: false };
+  }
+
+  if (hit?.type === "surface") {
+    impacts.spawnSurface(hit.point, hit.normal);
+    bulletHoles.spawn(hit.point, hit.normal);
+  }
+
+  return { enemyWasHit: false, waveComplete: false };
 }
 
 function handleMeleeHit(shot) {
@@ -755,7 +830,7 @@ function getShotDirection(spread) {
 }
 
 function reload() {
-  if (!state.isPlaying || state.isGameOver || state.isWaveComplete) return;
+  if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete) return;
 
   const result = weapon.reload();
   if (!result.started) return;
@@ -766,18 +841,24 @@ function reload() {
   setTimeout(() => updateHud(), result.duration);
 }
 
-function getBulletHit(direction) {
+function getBulletHit(direction, maxDistance = Infinity) {
   impactRaycaster.set(camera.position, direction);
-  resetImpactRaycasterRange();
+  impactRaycaster.near = 0;
+  impactRaycaster.far = Number.isFinite(maxDistance) ? maxDistance : Infinity;
 
   const enemyHit = enemies ? enemies.getHit(impactRaycaster) : null;
   const surfaceHit = getSurfaceImpact();
 
+  let result = null;
+
   if (enemyHit && surfaceHit) {
-    return enemyHit.distance <= surfaceHit.distance ? enemyHit : surfaceHit;
+    result = enemyHit.distance <= surfaceHit.distance ? enemyHit : surfaceHit;
+  } else {
+    result = enemyHit || surfaceHit || null;
   }
 
-  return enemyHit || surfaceHit || null;
+  resetImpactRaycasterRange();
+  return result;
 }
 
 function getSurfaceImpact() {
@@ -792,6 +873,246 @@ function getSurfaceImpact() {
     normal: hit.face?.normal?.clone()?.transformDirection(hit.object.matrixWorld) ?? new THREE.Vector3(0, 1, 0),
     distance: hit.distance
   };
+}
+
+function startSniperBulletCamera(shot, direction, hit, config = {}) {
+  if (config.enabled === false || !hit) return false;
+
+  const minDistance = Math.max(0, Number(config.minDistance) || 6);
+  if (hit.distance < minDistance) return false;
+
+  ensureSniperBulletVisuals();
+
+  sniperBulletCam.active = true;
+  sniperBulletCam.phase = "flight";
+  sniperBulletCam.shot = shot;
+  sniperBulletCam.hit = hit;
+  sniperBulletCam.speed = Math.max(1, Number(config.speed) || 65);
+  sniperBulletCam.distance = hit.distance;
+  sniperBulletCam.traveled = Math.min(0.8, hit.distance * 0.08);
+  sniperBulletCam.chaseDistance = Math.max(0.15, Number(config.chaseDistance) || 0.9);
+  sniperBulletCam.chaseHeight = Number(config.chaseHeight) || 0.18;
+  sniperBulletCam.sideOffset = Number(config.sideOffset) || 0.16;
+  sniperBulletCam.lookAhead = Math.max(0.25, Number(config.lookAhead) || 2.5);
+  sniperBulletCam.trailLength = Math.max(0.1, Number(config.trailLength) || 1.8);
+  sniperBulletCam.impactHold = Math.max(0, Number(config.impactHold) || 0.08);
+  sniperBulletCam.enemyHitSlowMoScale = Math.max(0.03, Math.min(1, Number(config.enemyHitSlowMoScale) || 0.18));
+  sniperBulletCam.enemyHitSlowMoDuration = Math.max(0, Number(config.enemyHitSlowMoDuration) || 1.0);
+  sniperBulletCam.enemyImpact = false;
+  sniperBulletCam.impactTimer = 0;
+
+  sniperBulletCam.origin.copy(camera.position);
+  sniperBulletCam.direction.copy(direction).normalize();
+  sniperBulletCam.position
+    .copy(sniperBulletCam.origin)
+    .addScaledVector(sniperBulletCam.direction, sniperBulletCam.traveled);
+
+  sniperBulletCam.projectile.visible = true;
+  sniperBulletCam.trail.visible = true;
+  sniperBulletCam.projectile.position.copy(sniperBulletCam.position);
+  sniperBulletCam.projectile.quaternion.setFromUnitVectors(sniperBulletAxis, sniperBulletCam.direction);
+
+  sniperBulletCamera.fov = Math.max(25, Math.min(90, Number(config.fov) || 58));
+  sniperBulletCamera.updateProjectionMatrix();
+
+  positionSniperBulletCamera(true);
+  updateSniperBulletTrail();
+  hud.hideScope();
+
+  return true;
+}
+
+function ensureSniperBulletVisuals() {
+  if (sniperBulletCam.projectile) return;
+
+  const geometry = new THREE.CylinderGeometry(0.028, 0.028, 0.22, 8, 1, false);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffd36a });
+  const projectile = new THREE.Mesh(geometry, material);
+  projectile.name = "SniperBulletProjectile";
+  projectile.frustumCulled = false;
+  projectile.visible = false;
+  scene.add(projectile);
+
+  const trailPositions = new Float32Array(6);
+  const trailGeometry = new THREE.BufferGeometry();
+  trailGeometry.setAttribute("position", new THREE.BufferAttribute(trailPositions, 3));
+
+  const trailMaterial = new THREE.LineBasicMaterial({
+    color: 0xffefb0,
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false
+  });
+
+  const trail = new THREE.Line(trailGeometry, trailMaterial);
+  trail.name = "SniperBulletTrail";
+  trail.frustumCulled = false;
+  trail.visible = false;
+  scene.add(trail);
+
+  sniperBulletCam.projectile = projectile;
+  sniperBulletCam.trail = trail;
+  sniperBulletCam.trailPositions = trailPositions;
+}
+
+function updateSniperBulletCamera(delta) {
+  if (!sniperBulletCam.active) return;
+
+  if (sniperBulletCam.phase === "impact") {
+    sniperBulletCam.impactTimer -= delta;
+
+    if (sniperBulletCam.impactTimer <= 0) {
+      finishSniperBulletCamera();
+    }
+
+    return;
+  }
+
+  sniperBulletCam.traveled = Math.min(
+    sniperBulletCam.distance,
+    sniperBulletCam.traveled + sniperBulletCam.speed * delta
+  );
+
+  sniperBulletCam.position
+    .copy(sniperBulletCam.origin)
+    .addScaledVector(sniperBulletCam.direction, sniperBulletCam.traveled);
+
+  if (sniperBulletCam.traveled >= sniperBulletCam.distance - 0.0001 && sniperBulletCam.hit?.point) {
+    sniperBulletCam.position.copy(sniperBulletCam.hit.point);
+  }
+
+  sniperBulletCam.projectile.position.copy(sniperBulletCam.position);
+  updateSniperBulletTrail();
+  positionSniperBulletCamera(false, delta);
+
+  if (sniperBulletCam.traveled < sniperBulletCam.distance - 0.0001) return;
+
+  // Hide the cinematic projectile immediately on impact while keeping the
+  // camera active for the impact/slow-motion hold.
+  if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
+  if (sniperBulletCam.trail) sniperBulletCam.trail.visible = false;
+
+  const result = resolveBulletImpact(sniperBulletCam.shot, sniperBulletCam.hit);
+
+  if (!state.isWaveComplete) refillActiveEnemies();
+  if (result.enemyWasHit) sounds.playEnemyHit();
+  updateHud();
+
+  sniperBulletCam.phase = "impact";
+  sniperBulletCam.enemyImpact = Boolean(result.enemyWasHit);
+  sniperBulletCam.impactTimer = sniperBulletCam.enemyImpact
+    ? Math.max(sniperBulletCam.impactHold, sniperBulletCam.enemyHitSlowMoDuration)
+    : sniperBulletCam.impactHold;
+
+  if (sniperBulletCam.impactTimer <= 0) {
+    finishSniperBulletCamera();
+  }
+}
+
+function updateSniperEnemyImpactSlowMotion(delta) {
+  if (
+    !sniperBulletCam.active ||
+    sniperBulletCam.phase !== "impact" ||
+    !sniperBulletCam.enemyImpact
+  ) {
+    return;
+  }
+
+  const enemy = sniperBulletCam.hit?.enemy;
+  if (!enemy?.userData) return;
+
+  const slowDelta = delta * sniperBulletCam.enemyHitSlowMoScale;
+
+  // Advance only the struck enemy's animation while normal gameplay stays frozen.
+  // This creates the impact slow-motion effect without running enemy AI/movement.
+  if (enemy.userData.mixer) {
+    enemy.userData.mixer.update(slowDelta);
+  }
+
+  // Keep animation-state timers roughly synchronized with the slowed mixer.
+  if (enemy.userData.isDying && Number.isFinite(enemy.userData.deathTimer)) {
+    enemy.userData.deathTimer = Math.max(0, enemy.userData.deathTimer - slowDelta);
+  } else if (enemy.userData.isHitReacting && Number.isFinite(enemy.userData.hitTimer)) {
+    enemy.userData.hitTimer = Math.max(0, enemy.userData.hitTimer - slowDelta);
+  }
+}
+
+function positionSniperBulletCamera(immediate = false, delta = 0) {
+  sniperBulletCam.right.crossVectors(sniperBulletCam.direction, sniperBulletWorldUp);
+
+  if (sniperBulletCam.right.lengthSq() < 0.0001) {
+    sniperBulletCam.right.set(1, 0, 0);
+  } else {
+    sniperBulletCam.right.normalize();
+  }
+
+  sniperBulletCam.cameraPosition
+    .copy(sniperBulletCam.position)
+    .addScaledVector(sniperBulletCam.direction, -sniperBulletCam.chaseDistance)
+    .addScaledVector(sniperBulletWorldUp, sniperBulletCam.chaseHeight)
+    .addScaledVector(sniperBulletCam.right, sniperBulletCam.sideOffset);
+
+  if (immediate) {
+    sniperBulletCamera.position.copy(sniperBulletCam.cameraPosition);
+  } else {
+    const blend = 1 - Math.exp(-18 * Math.max(delta, 0));
+    sniperBulletCamera.position.lerp(sniperBulletCam.cameraPosition, blend);
+  }
+
+  sniperBulletCam.lookTarget
+    .copy(sniperBulletCam.position)
+    .addScaledVector(sniperBulletCam.direction, sniperBulletCam.lookAhead);
+
+  sniperBulletCamera.up.copy(sniperBulletWorldUp);
+  sniperBulletCamera.lookAt(sniperBulletCam.lookTarget);
+}
+
+function updateSniperBulletTrail() {
+  if (!sniperBulletCam.trailPositions || !sniperBulletCam.trail) return;
+
+  const tailX = sniperBulletCam.position.x - sniperBulletCam.direction.x * sniperBulletCam.trailLength;
+  const tailY = sniperBulletCam.position.y - sniperBulletCam.direction.y * sniperBulletCam.trailLength;
+  const tailZ = sniperBulletCam.position.z - sniperBulletCam.direction.z * sniperBulletCam.trailLength;
+  const positions = sniperBulletCam.trailPositions;
+
+  positions[0] = tailX;
+  positions[1] = tailY;
+  positions[2] = tailZ;
+  positions[3] = sniperBulletCam.position.x;
+  positions[4] = sniperBulletCam.position.y;
+  positions[5] = sniperBulletCam.position.z;
+
+  sniperBulletCam.trail.geometry.attributes.position.needsUpdate = true;
+}
+
+function finishSniperBulletCamera() {
+  if (!sniperBulletCam.active) return;
+
+  sniperBulletCam.active = false;
+  sniperBulletCam.phase = "idle";
+  sniperBulletCam.shot = null;
+  sniperBulletCam.hit = null;
+  sniperBulletCam.impactTimer = 0;
+  sniperBulletCam.enemyImpact = false;
+
+  if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
+  if (sniperBulletCam.trail) sniperBulletCam.trail.visible = false;
+
+  if (isZooming) hud.showScope();
+}
+
+function cancelSniperBulletCamera() {
+  if (!sniperBulletCam.active) return;
+
+  sniperBulletCam.active = false;
+  sniperBulletCam.phase = "idle";
+  sniperBulletCam.shot = null;
+  sniperBulletCam.hit = null;
+  sniperBulletCam.impactTimer = 0;
+  sniperBulletCam.enemyImpact = false;
+
+  if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
+  if (sniperBulletCam.trail) sniperBulletCam.trail.visible = false;
 }
 
 function spawnTracer(direction) {
@@ -870,6 +1191,7 @@ function takeDamage(amount) {
 }
 
 function endGame() {
+  cancelSniperBulletCamera();
   stopZoom();
   state.isGameOver = true;
   state.isPlaying = false;
@@ -939,6 +1261,7 @@ async function resetGame() {
   dom.damageFlash.style.background = "rgba(255, 0, 0, 0.35)";
   dom.damageFlash.style.opacity = "0";
 
+  cancelSniperBulletCamera();
   stopZoom();
 
   await world.ready;
@@ -961,6 +1284,9 @@ function onResize() {
 
   weaponCamera.aspect = window.innerWidth / window.innerHeight;
   weaponCamera.updateProjectionMatrix();
+
+  sniperBulletCamera.aspect = window.innerWidth / window.innerHeight;
+  sniperBulletCamera.updateProjectionMatrix();
 
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
@@ -1013,6 +1339,12 @@ function updateCameraShake(delta) {
 }
 
 function renderWithCameraShake() {
+  if (sniperBulletCam.active) {
+    renderer.clear();
+    renderer.render(scene, sniperBulletCamera);
+    return;
+  }
+
   camera.position.add(cameraShake.positionOffset);
   camera.rotation.x += viewPunch.pitch;
   camera.rotation.y += viewPunch.yaw;
@@ -1035,8 +1367,9 @@ function animate() {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.05);
+  const gameplayActive = state.isPlaying && !sniperBulletCam.active;
 
-  player.update(delta, state.isPlaying);
+  player.update(delta, gameplayActive);
   recoverPlayerFall();
 
   if (state.isPlaying && player.inputState.jumped) {
@@ -1047,17 +1380,26 @@ function animate() {
     sounds.playFootstep(player.inputState.walking, player.inputState.speed01);
   }
 
-  if (state.isPlaying && !state.isGameOver && !state.isWaveComplete && player.inputState.mouseDown) {
+  if (gameplayActive && !state.isGameOver && !state.isWaveComplete && player.inputState.mouseDown) {
     shoot();
   }
 
   if (enemies) {
-    enemies.update(delta, state.isPlaying, takeDamage);
+    enemies.update(delta, gameplayActive, takeDamage);
   }
 
   weapon.update(delta, state.isPlaying, player.inputState);
+  updateSniperBulletCamera(delta);
+  updateSniperEnemyImpactSlowMotion(delta);
+
+  const impactTimeScale = (
+    sniperBulletCam.active &&
+    sniperBulletCam.phase === "impact" &&
+    sniperBulletCam.enemyImpact
+  ) ? sniperBulletCam.enemyHitSlowMoScale : 1;
+
   updateTracers(delta);
-  impacts.update(delta);
+  impacts.update(delta * impactTimeScale);
   bulletHoles.update(delta);
   updateViewPunch(delta);
   updateCameraShake(delta);
