@@ -39,7 +39,10 @@ function renderMainMenuTitle(title) {
 }
 
 renderMainMenuTitle(GAME_CONFIG.gameTitle);
-panelText.textContent = "WASD move  ·  Mouse aim  ·  LMB fire  ·  RMB scope  ·  R reload";
+const isTouchDevice = window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+panelText.textContent = isTouchDevice
+  ? "Left stick move  ·  Right stick look  ·  Fire / Scope / Reload / Shop"
+  : "WASD move  ·  Mouse aim  ·  LMB fire  ·  RMB scope  ·  R reload";
 
 document.body.classList.add("main-menu-active");
 overlay?.classList.add("main-menu");

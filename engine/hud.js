@@ -21,6 +21,8 @@ export function createHud() {
   sniperScope.id = "sniperScope";
   document.body.appendChild(sniperScope);
 
+  const isTouchDevice = window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+
   const buyMenu = document.createElement("div");
   buyMenu.id = "buyMenu";
   buyMenu.className = "cs-buy-menu";
@@ -29,7 +31,7 @@ export function createHud() {
       <div class="cs-buy-head">
         <div>
           <div class="cs-buy-title">Buy Weapons</div>
-          <div class="cs-buy-subtitle">Press B to close</div>
+          <div class="cs-buy-subtitle">${isTouchDevice ? "Tap × or SHOP to close" : "Press B to close"}</div>
         </div>
         <button id="buyMenuClose" class="cs-buy-close" type="button">×</button>
       </div>
@@ -41,7 +43,7 @@ export function createHud() {
 
   const buyHint = document.createElement("div");
   buyHint.id = "buyHint";
-  buyHint.textContent = "PRESS B TO BUY WEAPONS";
+  buyHint.textContent = isTouchDevice ? "TAP SHOP TO BUY WEAPONS" : "PRESS B TO BUY WEAPONS";
   document.body.appendChild(buyHint);
 
   const headshotMessage = document.createElement("div");

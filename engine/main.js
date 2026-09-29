@@ -27,6 +27,7 @@ const CONFIG = {
   walkMultiplier: 0.55,
   mouseSensitivity: 0.0022,
   dragSensitivity: 0.006,
+  touchLookSensitivity: 0.72,
   enemyAttackCooldown: 900,
   arenaSize: 42,
   fallY: -50
@@ -111,6 +112,22 @@ hud.setBuyCallback(handleBuyMenuSlot);
 hud.setBuyCloseCallback(() => closeBuyMenu(true));
 const world = createWorld({ THREE, scene, worldConfig: GAME_ASSETS.world });
 const player = createPlayer({ THREE, camera, config: CONFIG, colliders: world.colliders });
+const touchControls = createTouchControls();
+const touchState = {
+  enabled: isTouchDevice(),
+  movePointerId: null,
+  lookPointerId: null,
+  firePointerId: null,
+  scopePointerId: null,
+  moveCenterX: 0,
+  moveCenterY: 0,
+  lookCenterX: 0,
+  lookCenterY: 0,
+  lookLastX: 0,
+  lookLastY: 0,
+  stickRadius: 42
+};
+document.body.classList.toggle("touch-device", touchState.enabled);
 let enemies = null;
 
 const weapon = createWeaponSystem({
@@ -211,6 +228,7 @@ async function boot() {
   setupLights();
   setupInput();
   setupOverlayButtons();
+  setupTouchControls();
 
   try {
     await world.ready;
@@ -379,6 +397,224 @@ function setupOverlayButtons() {
   dom.startButton.insertAdjacentElement("afterend", dom.moreGamesButton);
 }
 
+
+function isTouchDevice() {
+  return window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+}
+
+function createTouchControls() {
+  const root = document.createElement("div");
+  root.id = "touchControls";
+  root.innerHTML = `
+    <div class="touch-stick touch-stick-move" id="touchMovePad">
+      <div class="touch-stick-ring"></div>
+      <div class="touch-stick-knob" id="touchMoveKnob"></div>
+      <div class="touch-stick-label">Move</div>
+    </div>
+
+    <div class="touch-stick touch-stick-look" id="touchLookPad">
+      <div class="touch-stick-ring"></div>
+      <div class="touch-stick-knob" id="touchLookKnob"></div>
+      <div class="touch-stick-label">Look</div>
+    </div>
+
+    <div class="touch-button-row touch-button-row-top">
+      <button id="touchPauseButton" class="touch-button touch-button-small" type="button">Pause</button>
+      <button id="touchBuyButton" class="touch-button touch-button-small" type="button">Shop</button>
+    </div>
+
+    <button id="touchJumpButton" class="touch-button touch-button-jump" type="button">Jump</button>
+    <button id="touchReloadButton" class="touch-button touch-button-reload" type="button">Reload</button>
+    <button id="touchScopeButton" class="touch-button touch-button-scope" type="button">ADS</button>
+    <button id="touchFireButton" class="touch-button touch-button-fire" type="button">Fire</button>
+  `;
+  document.body.appendChild(root);
+
+  return {
+    root,
+    movePad: root.querySelector("#touchMovePad"),
+    moveKnob: root.querySelector("#touchMoveKnob"),
+    lookPad: root.querySelector("#touchLookPad"),
+    lookKnob: root.querySelector("#touchLookKnob"),
+    fireButton: root.querySelector("#touchFireButton"),
+    scopeButton: root.querySelector("#touchScopeButton"),
+    reloadButton: root.querySelector("#touchReloadButton"),
+    jumpButton: root.querySelector("#touchJumpButton"),
+    buyButton: root.querySelector("#touchBuyButton"),
+    pauseButton: root.querySelector("#touchPauseButton")
+  };
+}
+
+function setupTouchControls() {
+  if (!touchState.enabled) return;
+
+  const bindStick = (pad, knob, kind) => {
+    const begin = event => {
+      event.preventDefault();
+      const key = kind === "move" ? "movePointerId" : "lookPointerId";
+      if (touchState[key] !== null) return;
+      touchState[key] = event.pointerId;
+      const rect = pad.getBoundingClientRect();
+      const centerX = rect.left + rect.width * 0.5;
+      const centerY = rect.top + rect.height * 0.5;
+      if (kind === "move") {
+        touchState.moveCenterX = centerX;
+        touchState.moveCenterY = centerY;
+      } else {
+        touchState.lookCenterX = centerX;
+        touchState.lookCenterY = centerY;
+        touchState.lookLastX = event.clientX;
+        touchState.lookLastY = event.clientY;
+      }
+      pad.setPointerCapture(event.pointerId);
+      update(event);
+    };
+
+    const update = event => {
+      event.preventDefault();
+      if (kind === "move") {
+        if (touchState.movePointerId !== event.pointerId) return;
+        const dx = event.clientX - touchState.moveCenterX;
+        const dy = event.clientY - touchState.moveCenterY;
+        const clamped = clampStick(dx, dy, touchState.stickRadius);
+        knob.style.transform = `translate(${clamped.x}px, ${clamped.y}px)`;
+        player.setTouchMove(clamped.x / touchState.stickRadius, clamped.y / touchState.stickRadius);
+      } else {
+        if (touchState.lookPointerId !== event.pointerId) return;
+        const deltaX = event.clientX - touchState.lookLastX;
+        const deltaY = event.clientY - touchState.lookLastY;
+        touchState.lookLastX = event.clientX;
+        touchState.lookLastY = event.clientY;
+        const dx = event.clientX - touchState.lookCenterX;
+        const dy = event.clientY - touchState.lookCenterY;
+        const clamped = clampStick(dx, dy, touchState.stickRadius);
+        knob.style.transform = `translate(${clamped.x}px, ${clamped.y}px)`;
+        player.addLookDelta(deltaX, deltaY, CONFIG.touchLookSensitivity);
+      }
+    };
+
+    const end = event => {
+      const key = kind === "move" ? "movePointerId" : "lookPointerId";
+      if (touchState[key] !== event.pointerId) return;
+      touchState[key] = null;
+      knob.style.transform = "translate(0px, 0px)";
+      if (kind === "move") player.setTouchMove(0, 0);
+      if (pad.hasPointerCapture?.(event.pointerId)) pad.releasePointerCapture(event.pointerId);
+    };
+
+    pad.addEventListener("pointerdown", begin, { passive: false });
+    pad.addEventListener("pointermove", update, { passive: false });
+    pad.addEventListener("pointerup", end);
+    pad.addEventListener("pointercancel", end);
+    pad.addEventListener("lostpointercapture", end);
+  };
+
+  bindStick(touchControls.movePad, touchControls.moveKnob, "move");
+  bindStick(touchControls.lookPad, touchControls.lookKnob, "look");
+
+  bindHoldButton(touchControls.fireButton, {
+    onStart: () => {
+      if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active) return;
+      sounds.resume();
+      player.onMouseDown({ button: 0 });
+    },
+    onEnd: () => player.onMouseUp({ button: 0 })
+  });
+
+  bindHoldButton(touchControls.scopeButton, {
+    onStart: () => {
+      if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active) return;
+      startZoom();
+    },
+    onEnd: () => stopZoom()
+  });
+
+  bindTapButton(touchControls.reloadButton, () => {
+    if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
+    sounds.resume();
+    reload();
+  });
+
+  bindTapButton(touchControls.jumpButton, () => {
+    if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
+    player.queueJump();
+  });
+
+  bindTapButton(touchControls.buyButton, () => {
+    sounds.resume();
+    toggleBuyMenu();
+  });
+
+  bindTapButton(touchControls.pauseButton, () => {
+    sounds.resume();
+    pauseGame();
+  });
+}
+
+function bindHoldButton(element, { onStart, onEnd }) {
+  let activePointerId = null;
+
+  const start = event => {
+    event.preventDefault();
+    activePointerId = event.pointerId;
+    element.classList.add("active");
+    element.setPointerCapture?.(event.pointerId);
+    onStart?.(event);
+  };
+
+  const end = event => {
+    if (activePointerId !== event.pointerId) return;
+    activePointerId = null;
+    element.classList.remove("active");
+    if (element.hasPointerCapture?.(event.pointerId)) element.releasePointerCapture(event.pointerId);
+    onEnd?.(event);
+  };
+
+  element.addEventListener("pointerdown", start, { passive: false });
+  element.addEventListener("pointerup", end);
+  element.addEventListener("pointercancel", end);
+  element.addEventListener("lostpointercapture", end);
+}
+
+function bindTapButton(element, callback) {
+  element.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    element.classList.add("active");
+  }, { passive: false });
+
+  const clear = () => element.classList.remove("active");
+  element.addEventListener("pointerup", clear);
+  element.addEventListener("pointercancel", clear);
+  element.addEventListener("click", event => {
+    event.preventDefault();
+    callback?.(event);
+  });
+}
+
+function clampStick(x, y, radius) {
+  const length = Math.hypot(x, y);
+  if (length <= radius || length === 0) return { x, y };
+  const scale = radius / length;
+  return { x: x * scale, y: y * scale };
+}
+
+function resetTouchControlsState() {
+  player.setTouchMove(0, 0);
+  player.onMouseUp({ button: 0 });
+  touchControls.moveKnob.style.transform = "translate(0px, 0px)";
+  touchControls.lookKnob.style.transform = "translate(0px, 0px)";
+  touchState.movePointerId = null;
+  touchState.lookPointerId = null;
+}
+
+function updateTouchControlsVisibility() {
+  if (!touchState.enabled) return;
+  const visible = state.isPlaying && !state.isGameOver && !state.isWaveComplete && !state.isBuyMenuOpen && !sniperBulletCam.active;
+  touchControls.root.classList.toggle("visible", visible);
+  document.body.classList.toggle("touch-controls-visible", visible);
+  if (!visible) resetTouchControlsState();
+}
+
 async function startGame() {
   sounds.resume();
 
@@ -409,7 +645,7 @@ function pauseGame() {
 
   dom.overlay.style.display = "grid";
   dom.panelTitle.textContent = "Paused";
-  dom.panelText.textContent = "Click continue to lock the cursor again.";
+  dom.panelText.textContent = touchState.enabled ? "Tap continue to resume the game." : "Click continue to lock the cursor again.";
   dom.startButton.textContent = "Continue";
 }
 
@@ -1542,6 +1778,7 @@ function animate() {
   const gameplayActive = state.isPlaying && !sniperBulletCam.active;
 
   player.update(delta, gameplayActive);
+  updateTouchControlsVisibility();
   recoverPlayerFall();
 
   if (state.isPlaying && player.inputState.jumped) {

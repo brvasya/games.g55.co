@@ -30,6 +30,11 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     jumpQueued: false
   };
 
+  const touchInput = {
+    moveX: 0,
+    moveY: 0
+  };
+
   const inputState = {
     mouseDeltaX: 0,
     mouseDeltaY: 0,
@@ -192,6 +197,19 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     camera.rotation.x = pitch;
   }
 
+  function addLookDelta(deltaX, deltaY, sensitivityMultiplier = 1) {
+    rotateView(deltaX, deltaY, config.dragSensitivity * sensitivityMultiplier);
+  }
+
+  function setTouchMove(x = 0, y = 0) {
+    touchInput.moveX = THREE.MathUtils.clamp(x, -1, 1);
+    touchInput.moveY = THREE.MathUtils.clamp(y, -1, 1);
+  }
+
+  function queueJump() {
+    keys.jumpQueued = true;
+  }
+
   function clearMovement() {
     keys.forward = false;
     keys.backward = false;
@@ -199,6 +217,8 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     keys.right = false;
     keys.walking = false;
     keys.jumpQueued = false;
+    touchInput.moveX = 0;
+    touchInput.moveY = 0;
     dragLookActive = false;
     inputState.mouseDown = false;
   }
@@ -281,10 +301,11 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     side.crossVectors(camera.up, forward).normalize();
     wishDirection.set(0, 0, 0);
 
-    if (keys.forward) wishDirection.add(forward);
-    if (keys.backward) wishDirection.sub(forward);
-    if (keys.left) wishDirection.add(side);
-    if (keys.right) wishDirection.sub(side);
+    const moveForward = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0) - touchInput.moveY;
+    const moveRight = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + touchInput.moveX;
+
+    if (moveForward !== 0) wishDirection.addScaledVector(forward, moveForward);
+    if (moveRight !== 0) wishDirection.addScaledVector(side, -moveRight);
 
     const hasInput = wishDirection.lengthSq() > 0;
     if (hasInput) wishDirection.normalize();
@@ -530,6 +551,9 @@ export function createPlayer({ THREE, camera, config, colliders }) {
     onMouseDown,
     onMouseUp,
     onMouseMove,
+    addLookDelta,
+    setTouchMove,
+    queueJump,
     clearMovement,
     reset,
     update
