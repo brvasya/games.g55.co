@@ -601,3 +601,52 @@ button {
     height: 80vmin;
   }
 }
+
+#headshotMessage {
+  position: fixed;
+  left: 50%;
+  top: 31%;
+  z-index: 90;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.78);
+  opacity: 0;
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: clamp(28px, 4vw, 58px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: center;
+  text-shadow:
+    0 2px 0 #7a0000,
+    0 0 8px rgba(255, 36, 36, 0.95),
+    0 0 22px rgba(255, 0, 0, 0.62);
+}
+
+#headshotMessage.show {
+  animation: headshot-pop 0.85s ease-out both;
+}
+
+@keyframes headshot-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.58);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -56%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -78%) scale(0.96);
+  }
+}
+
