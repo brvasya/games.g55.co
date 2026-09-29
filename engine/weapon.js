@@ -511,18 +511,42 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
   function setupAnimations(clips) {
     const config = currentModelConfig();
+    const assetAnim = config.anim || {};
 
     mixer = new THREE.AnimationMixer(model);
-    const baseClip = clips[0];
-    const fps = 30;
 
-    Object.entries(config.anim).forEach(([name, [start, end, loop]]) => {
-      const clip = THREE.AnimationUtils.subclip(baseClip, name, start, end, fps);
+    Object.entries(assetAnim).forEach(([name, clipName]) => {
+      if (typeof clipName !== "string" || !clipName.trim()) {
+        console.warn(`Weapon animation action must be a clip name: ${name}`);
+        return;
+      }
+
+      const clip = findAnimationClip(clips, clipName);
+
+      if (!clip) {
+        console.warn(`Missing weapon animation clip: ${clipName}`);
+        return;
+      }
+
       const action = mixer.clipAction(clip);
+      const loop = isLoopingAnimation(name);
       action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
       action.clampWhenFinished = !loop;
       actions.set(name, action);
     });
+  }
+
+  function findAnimationClip(animations, name) {
+    const wanted = String(name).trim().toLowerCase();
+
+    return animations.find(clip => {
+      const clipName = String(clip.name || "").trim().toLowerCase();
+      return clipName === wanted;
+    }) || null;
+  }
+
+  function isLoopingAnimation(name) {
+    return name === "idle";
   }
 
   function getAnimationSpeed(name) {
@@ -555,8 +579,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     clearTimeout(returnTimer);
     if (activeAction && activeAction !== action) activeAction.fadeOut(0.06);
 
-    const config = currentModelConfig();
-    const loop = config.anim[name][2];
+    const loop = isLoopingAnimation(name);
     const rawDuration = action.getClip().duration * 1000;
     const duration = getEffectiveActionDuration(name);
 
