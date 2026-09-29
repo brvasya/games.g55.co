@@ -27,6 +27,36 @@ export function createEnemies({
     maxTargetTries: 20
   };
 
+  const HIT_TUNING = {
+    // Hitboxes are generated once from the bind-pose skin weights. Each vertex
+    // belongs to its strongest influencing bone, which keeps boxes tight and
+    // prevents low-weight root/helper influences from creating huge hitboxes.
+    minDominantWeight: 0.05,
+    paddingRatio: 0.08,
+    minPadding: 0.004,
+    broadPhaseScale: 1.2
+  };
+
+  // Reused scratch objects keep bullet tests allocation-free.
+  const broadHitSphere = new THREE.Sphere();
+  const broadHitCenter = new THREE.Vector3();
+  const hitInverseMatrix = new THREE.Matrix4();
+  const hitLocalRay = new THREE.Ray();
+  const hitLocalPoint = new THREE.Vector3();
+  const hitWorldPoint = new THREE.Vector3();
+  const hitLocalNormal = new THREE.Vector3();
+  const hitWorldNormal = new THREE.Vector3();
+  const hitBoxSize = new THREE.Vector3();
+  const hitBoxPadding = new THREE.Vector3();
+  const hitBuildVertex = new THREE.Vector3();
+  const hitBuildWorldVertex = new THREE.Vector3();
+  const hitBuildBoneVertex = new THREE.Vector3();
+  const hitBroadBounds = new THREE.Box3();
+  const hitTransformedBox = new THREE.Box3();
+  const hitBroadSphereBuild = new THREE.Sphere();
+  const bestHitPoint = new THREE.Vector3();
+  const bestHitNormal = new THREE.Vector3();
+
   const terrainRaycaster = new THREE.Raycaster();
   const terrainRayOrigin = new THREE.Vector3();
   const terrainRayDirection = new THREE.Vector3(0, -1, 0);
@@ -34,6 +64,7 @@ export function createEnemies({
   const modelCache = new Map();
   const animationCache = new Map();
   const audioCache = new Map();
+  const hitboxTemplateCache = new Map();
 
   function getEnemyModelSources(asset) {
     const configured = Array.isArray(asset?.models)
@@ -405,6 +436,8 @@ export function createEnemies({
       pendingDamage: false,
       isHitReacting: false,
       hitTimer: 0,
+      hitboxes: [],
+      broadHitVolume: null,
       model: null,
       groundY: y,
       verticalVelocity: 0,
@@ -478,7 +511,255 @@ export function createEnemies({
     enemy.userData.model = model;
     enemy.updateMatrixWorld(true);
 
+    setupEnemyBoneHitboxes(enemy);
     setupEnemyAnimationsIfReady(enemy);
+  }
+
+  function setupEnemyBoneHitboxes(enemy) {
+    const model = enemy?.userData?.model;
+    if (!model) return;
+
+    // Skin-weight analysis is cached per visual GLB. Only the first enemy using
+    // a model scans its vertices; later clones reuse the local bone-box template.
+    const cacheKey = enemy.userData.modelSrc || null;
+    let template = cacheKey ? hitboxTemplateCache.get(cacheKey) : null;
+
+    enemy.updateWorldMatrix(true, true);
+
+    if (!template) {
+      template = buildEnemyBoneHitboxTemplate(model);
+      if (cacheKey) hitboxTemplateCache.set(cacheKey, template);
+    }
+
+    const hitboxes = [];
+
+    for (const entry of template) {
+      const bone = resolveNodeIndexPath(model, entry.path);
+      if (!bone?.isBone) continue;
+
+      hitboxes.push({
+        bone,
+        name: entry.name,
+        vertexCount: entry.vertexCount,
+        box: new THREE.Box3(
+          new THREE.Vector3(entry.min[0], entry.min[1], entry.min[2]),
+          new THREE.Vector3(entry.max[0], entry.max[1], entry.max[2])
+        )
+      });
+    }
+
+    enemy.userData.hitboxes = hitboxes;
+
+    // Build one cheap broad-phase sphere from the bone boxes. This uses only a
+    // handful of boxes, not the skinned vertices, and is done once per enemy.
+    hitBroadBounds.makeEmpty();
+
+    for (const hitbox of hitboxes) {
+      hitTransformedBox.copy(hitbox.box).applyMatrix4(hitbox.bone.matrixWorld);
+      hitBroadBounds.union(hitTransformedBox);
+    }
+
+    if (!hitBroadBounds.isEmpty()) {
+      hitBroadBounds.getBoundingSphere(hitBroadSphereBuild);
+      const localCenter = enemy.worldToLocal(hitBroadSphereBuild.center.clone());
+
+      enemy.userData.broadHitVolume = {
+        center: localCenter,
+        radius: hitBroadSphereBuild.radius * HIT_TUNING.broadPhaseScale
+      };
+    } else {
+      enemy.userData.broadHitVolume = null;
+    }
+
+    if (hitboxes.length === 0) {
+      console.warn("Enemy skinned model produced no automatic bone hitboxes");
+    }
+  }
+
+  function buildEnemyBoneHitboxTemplate(model) {
+    const boneBounds = new Map();
+    let skinnedMeshCount = 0;
+
+    model.traverse(object => {
+      if (!object.isSkinnedMesh || !object.geometry || !object.skeleton) return;
+
+      const geometry = object.geometry;
+      const position = geometry.attributes.position;
+      const skinIndex = geometry.attributes.skinIndex;
+      const skinWeight = geometry.attributes.skinWeight;
+      const bones = object.skeleton.bones || [];
+
+      if (!position || !skinIndex || !skinWeight || !bones.length) return;
+
+      skinnedMeshCount++;
+      object.updateWorldMatrix(true, false);
+
+      const inverseByBone = new Map();
+      for (const bone of bones) {
+        if (!bone) continue;
+        bone.updateWorldMatrix(true, false);
+        inverseByBone.set(bone, bone.matrixWorld.clone().invert());
+      }
+
+      const influenceCount = Math.min(4, skinWeight.itemSize, skinIndex.itemSize);
+
+      for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex++) {
+        let strongestWeight = -Infinity;
+        let strongestBoneIndex = -1;
+
+        for (let component = 0; component < influenceCount; component++) {
+          const weight = getAttributeComponent(skinWeight, vertexIndex, component);
+          if (weight <= strongestWeight) continue;
+
+          strongestWeight = weight;
+          strongestBoneIndex = Math.round(
+            getAttributeComponent(skinIndex, vertexIndex, component)
+          );
+        }
+
+        if (
+          strongestWeight < HIT_TUNING.minDominantWeight ||
+          strongestBoneIndex < 0 ||
+          strongestBoneIndex >= bones.length
+        ) {
+          continue;
+        }
+
+        const bone = bones[strongestBoneIndex];
+        const boneInverse = inverseByBone.get(bone);
+        if (!bone || !boneInverse) continue;
+
+        let entry = boneBounds.get(bone);
+        if (!entry) {
+          const path = getNodeIndexPath(bone, model);
+          if (!path) continue;
+
+          entry = {
+            bone,
+            path,
+            box: new THREE.Box3().makeEmpty(),
+            vertexCount: 0,
+            name: bone.name || `bone_${strongestBoneIndex}`
+          };
+          boneBounds.set(bone, entry);
+        }
+
+        hitBuildVertex.fromBufferAttribute(position, vertexIndex);
+        hitBuildWorldVertex.copy(hitBuildVertex).applyMatrix4(object.matrixWorld);
+        hitBuildBoneVertex.copy(hitBuildWorldVertex).applyMatrix4(boneInverse);
+
+        entry.box.expandByPoint(hitBuildBoneVertex);
+        entry.vertexCount++;
+      }
+    });
+
+    const template = [];
+
+    for (const entry of boneBounds.values()) {
+      if (entry.box.isEmpty() || entry.vertexCount === 0) continue;
+
+      entry.box.getSize(hitBoxSize);
+      const maxDimension = Math.max(hitBoxSize.x, hitBoxSize.y, hitBoxSize.z);
+      if (!Number.isFinite(maxDimension) || maxDimension <= 0.00001) continue;
+
+      const padding = Math.max(
+        maxDimension * HIT_TUNING.paddingRatio,
+        HIT_TUNING.minPadding
+      );
+
+      hitBoxPadding.set(padding, padding, padding);
+      entry.box.min.sub(hitBoxPadding);
+      entry.box.max.add(hitBoxPadding);
+
+      template.push({
+        path: entry.path,
+        name: entry.name,
+        vertexCount: entry.vertexCount,
+        min: [entry.box.min.x, entry.box.min.y, entry.box.min.z],
+        max: [entry.box.max.x, entry.box.max.y, entry.box.max.z]
+      });
+    }
+
+    if (skinnedMeshCount > 0 && template.length === 0) {
+      console.warn("Enemy model has skinning data but no usable weighted bone vertices");
+    }
+
+    return template;
+  }
+
+  function getNodeIndexPath(node, root) {
+    const path = [];
+    let current = node;
+
+    while (current && current !== root) {
+      const parent = current.parent;
+      if (!parent) return null;
+
+      const childIndex = parent.children.indexOf(current);
+      if (childIndex < 0) return null;
+
+      path.push(childIndex);
+      current = parent;
+    }
+
+    if (current !== root) return null;
+    path.reverse();
+    return path;
+  }
+
+  function resolveNodeIndexPath(root, path) {
+    let current = root;
+
+    for (const childIndex of path) {
+      current = current?.children?.[childIndex];
+      if (!current) return null;
+    }
+
+    return current;
+  }
+
+  function getAttributeComponent(attribute, index, component) {
+    switch (component) {
+      case 0: return attribute.getX(index);
+      case 1: return attribute.getY(index);
+      case 2: return attribute.getZ(index);
+      case 3: return attribute.getW(index);
+      default: return 0;
+    }
+  }
+
+  function getLocalBoxHitNormal(box, point, target) {
+    const minX = Math.abs(point.x - box.min.x);
+    const maxX = Math.abs(box.max.x - point.x);
+    const minY = Math.abs(point.y - box.min.y);
+    const maxY = Math.abs(box.max.y - point.y);
+    const minZ = Math.abs(point.z - box.min.z);
+    const maxZ = Math.abs(box.max.z - point.z);
+
+    let distance = minX;
+    target.set(-1, 0, 0);
+
+    if (maxX < distance) {
+      distance = maxX;
+      target.set(1, 0, 0);
+    }
+    if (minY < distance) {
+      distance = minY;
+      target.set(0, -1, 0);
+    }
+    if (maxY < distance) {
+      distance = maxY;
+      target.set(0, 1, 0);
+    }
+    if (minZ < distance) {
+      distance = minZ;
+      target.set(0, 0, -1);
+    }
+    if (maxZ < distance) {
+      target.set(0, 0, 1);
+    }
+
+    return target;
   }
 
   function findRootMotionTrack(clip, model) {
@@ -1007,31 +1288,90 @@ export function createEnemies({
   }
 
   function getHit(activeRaycaster) {
-    const activeEnemies = enemies.filter(enemy => !enemy.userData.isDying);
-    const hits = activeRaycaster.intersectObjects(activeEnemies, true);
-    if (!hits.length) return null;
+    let bestEnemy = null;
+    let bestBoneName = null;
+    let bestDistance = Infinity;
 
-    const hit = hits[0];
-    const enemy = findEnemyRoot(hit.object);
+    const ray = activeRaycaster.ray;
+    const near = Number.isFinite(activeRaycaster.near) ? activeRaycaster.near : 0;
+    const far = Number.isFinite(activeRaycaster.far) ? activeRaycaster.far : Infinity;
 
-    if (!enemy) return null;
+    for (const enemy of enemies) {
+      if (enemy.userData.isDying) continue;
+
+      const hitboxes = enemy.userData.hitboxes;
+      if (!hitboxes || hitboxes.length === 0) continue;
+
+      // Update only the enemy root first. Most enemies are rejected by this
+      // broad-phase sphere without touching any animated bone matrices.
+      enemy.updateWorldMatrix(true, false);
+
+      const broad = enemy.userData.broadHitVolume;
+      if (broad) {
+        broadHitCenter.copy(broad.center).applyMatrix4(enemy.matrixWorld);
+        broadHitSphere.center.copy(broadHitCenter);
+        broadHitSphere.radius = broad.radius;
+
+        if (!ray.intersectsSphere(broadHitSphere)) continue;
+      }
+
+      // A likely target passed the broad phase. Refresh its animated hierarchy
+      // once for this shot, then ray-test bone-local boxes directly.
+      enemy.updateMatrixWorld(true);
+
+      for (const hitbox of hitboxes) {
+        const bone = hitbox.bone;
+        if (!bone) continue;
+
+        hitInverseMatrix.copy(bone.matrixWorld).invert();
+        hitLocalRay.copy(ray).applyMatrix4(hitInverseMatrix);
+
+        const localIntersection = hitLocalRay.intersectBox(hitbox.box, hitLocalPoint);
+        if (!localIntersection) continue;
+
+        hitWorldPoint.copy(localIntersection).applyMatrix4(bone.matrixWorld);
+
+        const distance = ray.origin.distanceTo(hitWorldPoint);
+        if (distance < near || distance > far || distance >= bestDistance) continue;
+
+        getLocalBoxHitNormal(hitbox.box, localIntersection, hitLocalNormal);
+        hitWorldNormal.copy(hitLocalNormal).transformDirection(bone.matrixWorld);
+
+        bestDistance = distance;
+        bestEnemy = enemy;
+        bestBoneName = hitbox.name;
+        bestHitPoint.copy(hitWorldPoint);
+        bestHitNormal.copy(hitWorldNormal);
+      }
+    }
+
+    if (!bestEnemy) return null;
 
     return {
       type: "enemy",
-      enemy,
-      point: hit.point,
-      normal: hit.face
-        ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
-        : new THREE.Vector3(0, 1, 0),
-      distance: hit.distance
+      enemy: bestEnemy,
+      bone: bestBoneName,
+      headshot: isHeadshotBone(bestBoneName),
+      point: bestHitPoint.clone(),
+      normal: bestHitNormal.clone(),
+      distance: bestDistance
     };
   }
 
-  function damageEnemy(enemy, damage) {
+  function isHeadshotBone(boneName) {
+    if (!boneName) return false;
+    return String(boneName).toLowerCase().includes("head");
+  }
+
+  function damageEnemy(enemy, damage, { instantKill = false } = {}) {
     if (!enemy || !enemies.includes(enemy)) return false;
     if (enemy.userData.isDying) return false;
 
-    enemy.userData.health -= damage;
+    if (instantKill) {
+      enemy.userData.health = 0;
+    } else {
+      enemy.userData.health -= damage;
+    }
 
     if (enemy.userData.health <= 0) {
       enemy.userData.isDying = true;
