@@ -8,7 +8,37 @@ const panelTitle = document.querySelector("#panel h1");
 const panelText = document.querySelector("#panel p");
 const startButton = document.getElementById("startButton");
 
-panelTitle.textContent = GAME_CONFIG.gameTitle;
+function renderMainMenuTitle(title) {
+  if (!panelTitle) return;
+
+  const value = String(title ?? "").trim();
+  const colonIndex = value.indexOf(":");
+
+  panelTitle.replaceChildren();
+
+  if (colonIndex > 0 && colonIndex < value.length - 1) {
+    const prefix = value.slice(0, colonIndex + 1).trim();
+    const name = value.slice(colonIndex + 1).trim();
+
+    const prefixElement = document.createElement("span");
+    prefixElement.className = "main-title-prefix";
+    prefixElement.textContent = prefix;
+
+    const nameElement = document.createElement("span");
+    nameElement.className = "main-title-name";
+    nameElement.textContent = name;
+
+    panelTitle.append(prefixElement, nameElement);
+    return;
+  }
+
+  const nameElement = document.createElement("span");
+  nameElement.className = "main-title-name";
+  nameElement.textContent = value;
+  panelTitle.append(nameElement);
+}
+
+renderMainMenuTitle(GAME_CONFIG.gameTitle);
 panelText.textContent = "WASD move  ·  Mouse aim  ·  LMB fire  ·  RMB scope  ·  R reload";
 
 document.body.classList.add("main-menu-active");

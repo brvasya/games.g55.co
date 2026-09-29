@@ -7,7 +7,7 @@ import { MINIGUN } from "./assets/minigun.js";
 import { ENEMY } from "./assets/enemy.js";
 
 export const GAME_CONFIG = {
-gameTitle: "G55Game",
+gameTitle: "Shooter: Zombie Survival",
 
 wave: {
 baseEnemies: 16,
