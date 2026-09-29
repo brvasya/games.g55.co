@@ -6,6 +6,7 @@ export function createSounds() {
   const JUMP_SOUND = "./assets/sounds/jump.ogg";
   const DEATH_SOUND = "./assets/sounds/death.ogg";
   const HIT_SOUND = "./assets/sounds/damage.ogg";
+  const HEADSHOT_SOUND = "./assets/headshot.ogg";
 
   if (masterGain) {
     masterGain.gain.value = 1.0;
@@ -49,6 +50,12 @@ export function createSounds() {
   }
 
   function playEnemyDie() {}
+
+  function playHeadshot() {
+    if (!ctx) return;
+    resume();
+    playFromAsset(HEADSHOT_SOUND, 1.0);
+  }
 
   // UPDATED: use base64 hit sound instead of oscillator
   function playPlayerHit() {
@@ -167,6 +174,7 @@ export function createSounds() {
     playEmpty,
     playEnemyHit,
     playEnemyDie,
+    playHeadshot,
     playPlayerHit,
     playFootstep,
     playJump,
