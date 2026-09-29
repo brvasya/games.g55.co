@@ -495,7 +495,10 @@ function refillActiveEnemies() {
 function handleEnemyKilled({ headshot = false } = {}) {
   const points = getKillScore({ headshot });
 
-  if (headshot) hud.showHeadshot();
+  if (headshot) {
+    hud.showHeadshot();
+    sounds.playHeadshot();
+  }
 
   state.score += points;
   state.waveScore += 1;
