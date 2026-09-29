@@ -461,8 +461,15 @@ function getWaveEnemyLimit() {
   return Math.min(wave.baseEnemies + state.wave * wave.enemiesPerWave, wave.maxEnemies);
 }
 
-function getKillScore() {
-  return 100;
+function getKillScore({ headshot = false } = {}) {
+  const baseScore = 100;
+  const headshotBonus = Math.max(0, Number(CONFIG.headshot?.reward) || 0);
+
+  return baseScore + (headshot ? headshotBonus : 0);
+}
+
+function shouldInstantKillHeadshot(hit) {
+  return Boolean(hit?.headshot && CONFIG.headshot?.instantKill !== false);
 }
 
 function startWave() {
@@ -485,8 +492,8 @@ function refillActiveEnemies() {
   }
 }
 
-function handleEnemyKilled() {
-  const points = getKillScore();
+function handleEnemyKilled({ headshot = false } = {}) {
+  const points = getKillScore({ headshot });
 
   state.score += points;
   state.waveScore += 1;
@@ -647,7 +654,10 @@ function shoot() {
     const hit = getBulletHit(direction);
 
     if (hit?.type === "enemy") {
-      const killed = enemies.damageEnemy(hit.enemy, shot.damage);
+      const headshot = Boolean(hit.headshot);
+      const killed = enemies.damageEnemy(hit.enemy, shot.damage, {
+        instantKill: shouldInstantKillHeadshot(hit)
+      });
 
       impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
       enemyWasHit = true;
@@ -655,7 +665,7 @@ function shoot() {
       if (killed) {
         sounds.playEnemyDie();
 
-        if (handleEnemyKilled()) break;
+        if (handleEnemyKilled({ headshot })) break;
       }
     } else if (hit?.type === "surface") {
       impacts.spawnSurface(hit.point, hit.normal);
