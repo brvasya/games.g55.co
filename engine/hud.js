@@ -98,6 +98,10 @@ export function createHud() {
     setTimeout(() => crosshair.classList.remove("fire"), 120);
   }
 
+  function setCrosshairVisible(visible) {
+    crosshair.style.visibility = visible ? "" : "hidden";
+  }
+
   function showHeadshot() {
     headshotMessage.classList.remove("show");
     void headshotMessage.offsetWidth;
@@ -196,6 +200,7 @@ export function createHud() {
   return {
     update,
     setCrosshairFire,
+    setCrosshairVisible,
     showHeadshot,
     showScope,
     hideScope,
