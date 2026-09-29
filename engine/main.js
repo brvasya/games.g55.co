@@ -10,7 +10,7 @@ import { createImpactParticles } from "./impactParticles.js";
 import { createBulletHoles } from "./bulletHoles.js";
 
 const KILL_REWARD = 100;
-const HEADSHOT_REWARD = 50;
+const HEADSHOT_REWARD = 100;
 
 export function bootGame({ GAME_CONFIG, GAME_ASSETS }) {
 const CONFIG = {
@@ -658,7 +658,8 @@ function shoot() {
     if (hit?.type === "enemy") {
       const headshot = Boolean(hit.headshot);
       const killed = enemies.damageEnemy(hit.enemy, shot.damage, {
-        instantKill: shouldInstantKillHeadshot(hit)
+        instantKill: shouldInstantKillHeadshot(hit),
+        headshot
       });
 
       impacts.spawnBlood(hit.point, hit.normal.clone().multiplyScalar(-1));
