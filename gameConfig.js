@@ -1,4 +1,3 @@
-import { WORLD } from "./assets/world.js";
 import { PISTOL } from "./assets/pistol.js";
 import { SMG } from "./assets/smg.js";
 import { RIFLE } from "./assets/rifle.js";
@@ -21,8 +20,6 @@ types: ["enemy"]
 };
 
 export const GAME_ASSETS = {
-world: WORLD,
-
 weaponSlots: [
 { id: 1, asset: PISTOL, owned: true, price: 0 },
 { id: 2, asset: SMG, owned: true, price: 1800 },
