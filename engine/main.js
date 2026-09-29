@@ -427,6 +427,12 @@ function createTouchControls() {
     <button id="touchReloadButton" class="touch-button touch-button-reload" type="button">Reload</button>
     <button id="touchScopeButton" class="touch-button touch-button-scope" type="button">ADS</button>
     <button id="touchFireButton" class="touch-button touch-button-fire" type="button">Fire</button>
+
+    <div id="rotateDevice" class="rotate-device">
+      <div class="rotate-device-icon">↻</div>
+      <div class="rotate-device-title">Rotate device</div>
+      <div class="rotate-device-text">Landscape mode is required for gameplay</div>
+    </div>
   `;
   document.body.appendChild(root);
 
@@ -441,7 +447,8 @@ function createTouchControls() {
     reloadButton: root.querySelector("#touchReloadButton"),
     jumpButton: root.querySelector("#touchJumpButton"),
     buyButton: root.querySelector("#touchBuyButton"),
-    pauseButton: root.querySelector("#touchPauseButton")
+    pauseButton: root.querySelector("#touchPauseButton"),
+    rotateDevice: root.querySelector("#rotateDevice")
   };
 }
 
@@ -549,6 +556,17 @@ function setupTouchControls() {
     sounds.resume();
     pauseGame();
   });
+
+  let wasPortrait = isTouchPortrait();
+  const handleTouchViewportChange = () => {
+    const portrait = isTouchPortrait();
+    if (portrait === wasPortrait) return;
+    wasPortrait = portrait;
+    resetTouchControlsState();
+  };
+
+  window.addEventListener("orientationchange", handleTouchViewportChange);
+  window.addEventListener("resize", handleTouchViewportChange);
 }
 
 function bindHoldButton(element, { onStart, onEnd }) {
@@ -596,6 +614,10 @@ function clampStick(x, y, radius) {
   if (length <= radius || length === 0) return { x, y };
   const scale = radius / length;
   return { x: x * scale, y: y * scale };
+}
+
+function isTouchPortrait() {
+  return touchState.enabled && window.innerHeight > window.innerWidth;
 }
 
 function resetTouchControlsState() {
@@ -1775,7 +1797,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.05);
-  const gameplayActive = state.isPlaying && !sniperBulletCam.active;
+  const gameplayActive = state.isPlaying && !sniperBulletCam.active && !isTouchPortrait();
 
   player.update(delta, gameplayActive);
   updateTouchControlsVisibility();

@@ -1431,19 +1431,69 @@ button.cs-buy-purchase:not(:disabled):hover {
   }
 }
 
-
-/* Mobile touch controls */
+/* Mobile touch controls — production landscape layout */
 body.touch-device #buyHint {
   display: none;
 }
 
+body.touch-device.touch-controls-visible #hud {
+  transition: opacity 120ms ease;
+}
+
+/* On mobile, HUD information lives at the top so the bottom corners stay free. */
 body.touch-device .cs-bottom-left,
 body.touch-device .cs-bottom-right {
-  bottom: 124px;
+  bottom: auto;
+  min-width: 112px;
+  padding: 8px 10px 9px;
+  border-radius: 9px;
+}
+
+body.touch-device .cs-bottom-left {
+  left: max(10px, env(safe-area-inset-left, 0px) + 6px);
+  top: max(10px, env(safe-area-inset-top, 0px) + 6px);
+}
+
+body.touch-device .cs-bottom-right {
+  right: max(10px, env(safe-area-inset-right, 0px) + 6px);
+  top: max(58px, env(safe-area-inset-top, 0px) + 54px);
+  text-align: right;
+}
+
+body.touch-device .cs-bottom-left .cs-label,
+body.touch-device .cs-bottom-right .cs-label {
+  margin-bottom: 4px;
+  font-size: 8px;
+  letter-spacing: 0.11em;
+}
+
+body.touch-device .cs-bottom-left .cs-big,
+body.touch-device .cs-bottom-right .cs-ammo {
+  font-size: 26px;
+}
+
+body.touch-device .cs-bottom-right .cs-ammo small {
+  font-size: 12px;
 }
 
 body.touch-device .cs-topbar {
-  top: max(10px, env(safe-area-inset-top, 0px) + 8px);
+  top: max(10px, env(safe-area-inset-top, 0px) + 6px);
+  min-height: 38px;
+  padding: 0 3px;
+}
+
+body.touch-device .cs-badge,
+body.touch-device .cs-score,
+body.touch-device .cs-round {
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+body.touch-device .cs-score,
+body.touch-device .cs-round span,
+body.touch-device .cs-badge span {
+  font-size: 11px;
 }
 
 #touchControls {
@@ -1452,45 +1502,57 @@ body.touch-device .cs-topbar {
   z-index: 8;
   display: none;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 #touchControls.visible {
   display: block;
 }
 
+#touchControls *,
+.touch-button,
+.touch-stick,
+.touch-stick * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
 .touch-stick,
 .touch-button {
   pointer-events: auto;
-  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
 }
 
 .touch-stick {
   position: absolute;
-  width: 112px;
-  height: 112px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.055), rgba(4,8,12,0.22));
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05), rgba(4,8,12,0.18));
   border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: 0 14px 32px rgba(0,0,0,0.18);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  touch-action: none;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.2);
+  backdrop-filter: blur(9px) saturate(118%);
+  -webkit-backdrop-filter: blur(9px) saturate(118%);
 }
 
 .touch-stick-move {
   left: max(14px, env(safe-area-inset-left, 0px) + 8px);
-  bottom: max(16px, env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: max(14px, env(safe-area-inset-bottom, 0px) + 8px);
 }
 
 .touch-stick-look {
   right: max(14px, env(safe-area-inset-right, 0px) + 8px);
-  bottom: max(16px, env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: max(14px, env(safe-area-inset-bottom, 0px) + 8px);
 }
 
 .touch-stick-ring {
   position: absolute;
-  inset: 14px;
-  border: 1px solid rgba(255,255,255,0.12);
+  inset: 12px;
+  border: 1px solid rgba(255,255,255,0.11);
   border-radius: 50%;
 }
 
@@ -1498,127 +1560,216 @@ body.touch-device .cs-topbar {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 44px;
-  height: 44px;
-  margin-left: -22px;
-  margin-top: -22px;
+  width: 38px;
+  height: 38px;
+  margin-left: -19px;
+  margin-top: -19px;
   border-radius: 50%;
-  background: linear-gradient(180deg, rgba(56,191,235,0.92), rgba(18,136,194,0.88));
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-  transition: transform 40ms linear;
+  background: linear-gradient(180deg, rgba(56,191,235,0.94), rgba(18,136,194,0.9));
+  box-shadow: 0 7px 18px rgba(0,0,0,0.28);
+  transition: transform 34ms linear;
 }
 
 .touch-stick-look .touch-stick-knob {
-  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(180,215,235,0.65));
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(180,215,235,0.68));
 }
 
 .touch-stick-label {
   position: absolute;
   left: 50%;
-  bottom: -18px;
+  bottom: -15px;
   transform: translateX(-50%);
-  color: rgba(255,255,255,0.54);
-  font: 700 10px/1 var(--ui-font);
-  letter-spacing: 0.14em;
+  color: rgba(255,255,255,0.5);
+  font: 700 8px/1 var(--ui-font);
+  letter-spacing: 0.13em;
   text-transform: uppercase;
+  pointer-events: none;
 }
 
 .touch-button-row {
   position: absolute;
-  top: max(18px, env(safe-area-inset-top, 0px) + 12px);
-  right: max(14px, env(safe-area-inset-right, 0px) + 8px);
+  top: max(10px, env(safe-area-inset-top, 0px) + 6px);
+  right: max(10px, env(safe-area-inset-right, 0px) + 6px);
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .touch-button {
+  appearance: none;
+  -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin: 0;
+  padding: 0;
   color: var(--ui-text);
-  background: linear-gradient(180deg, rgba(18,26,34,0.85), rgba(8,12,17,0.9));
+  background: linear-gradient(180deg, rgba(18,26,34,0.86), rgba(8,12,17,0.92));
   border: 1px solid var(--ui-line-strong);
-  border-radius: 14px;
-  box-shadow: 0 10px 28px rgba(0,0,0,0.28);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  font: 700 11px/1 var(--ui-font);
-  letter-spacing: 0.12em;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.26);
+  backdrop-filter: blur(9px) saturate(118%);
+  -webkit-backdrop-filter: blur(9px) saturate(118%);
+  outline: none;
+  font: 700 9px/1 var(--ui-font);
+  letter-spacing: 0.10em;
   text-transform: uppercase;
-  touch-action: manipulation;
+  white-space: nowrap;
+  touch-action: none;
+}
+
+.touch-button:focus,
+.touch-button:focus-visible {
+  outline: none;
 }
 
 .touch-button.active {
-  transform: scale(0.97);
-  filter: brightness(1.08);
+  transform: scale(0.96);
+  filter: brightness(1.12);
 }
 
 .touch-button-small {
-  min-width: 72px;
-  height: 42px;
-  padding: 0 14px;
+  min-width: 58px;
+  height: 36px;
+  padding: 0 10px;
 }
 
 .touch-button-jump,
 .touch-button-reload,
 .touch-button-scope {
   position: absolute;
-  width: 74px;
-  height: 54px;
+  width: 62px;
+  height: 44px;
 }
 
 .touch-button-jump {
-  left: max(24px, env(safe-area-inset-left, 0px) + 18px);
-  bottom: 142px;
+  left: max(25px, env(safe-area-inset-left, 0px) + 18px);
+  bottom: max(124px, env(safe-area-inset-bottom, 0px) + 118px);
 }
 
 .touch-button-reload {
-  right: 108px;
-  bottom: 146px;
+  right: max(166px, env(safe-area-inset-right, 0px) + 160px);
+  bottom: max(112px, env(safe-area-inset-bottom, 0px) + 106px);
 }
 
 .touch-button-scope {
-  right: 26px;
-  bottom: 146px;
+  right: max(98px, env(safe-area-inset-right, 0px) + 92px);
+  bottom: max(112px, env(safe-area-inset-bottom, 0px) + 106px);
 }
 
 .touch-button-fire {
   position: absolute;
-  right: 30px;
-  bottom: 236px;
-  width: 90px;
-  height: 90px;
+  right: max(18px, env(safe-area-inset-right, 0px) + 12px);
+  bottom: max(138px, env(safe-area-inset-bottom, 0px) + 132px);
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  background: linear-gradient(180deg, rgba(39,183,235,0.92), rgba(13,117,180,0.88));
-  font-size: 14px;
+  background: linear-gradient(180deg, rgba(39,183,235,0.94), rgba(13,117,180,0.9));
+  font-size: 12px;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.28), 0 0 0 1px rgba(89,210,255,0.16);
 }
 
-@media (max-width: 760px) {
-  body.touch-device .cs-bottom-left,
-  body.touch-device .cs-bottom-right {
-    bottom: 118px;
-    min-width: 140px;
+.rotate-device {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 28px;
+  pointer-events: auto;
+  text-align: center;
+  color: var(--ui-text);
+  background: rgba(3,6,9,0.88);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+.rotate-device-icon {
+  font-size: 46px;
+  color: var(--ui-accent-bright);
+}
+
+.rotate-device-title {
+  font: 800 24px/1 var(--ui-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rotate-device-text {
+  max-width: 300px;
+  color: var(--ui-muted);
+  font: 600 12px/1.45 var(--ui-font);
+}
+
+/* Portrait gameplay is blocked: the FPS runs only in landscape on phones/tablets. */
+@media (orientation: portrait) and (pointer: coarse) {
+  body.touch-device.touch-controls-visible #hud {
+    opacity: 0;
   }
 
+  #touchControls.visible > :not(.rotate-device) {
+    display: none !important;
+  }
+
+  #touchControls.visible .rotate-device {
+    display: grid;
+  }
+}
+
+/* Extra compression for very short landscape browser viewports. */
+@media (orientation: landscape) and (max-height: 420px) {
   .touch-stick {
-    width: 104px;
-    height: 104px;
+    width: 86px;
+    height: 86px;
   }
 
-  .touch-button-fire {
-    width: 84px;
-    height: 84px;
-    right: 18px;
-    bottom: 226px;
+  .touch-stick-knob {
+    width: 34px;
+    height: 34px;
+    margin-left: -17px;
+    margin-top: -17px;
   }
 
+  .touch-button-jump,
+  .touch-button-reload,
   .touch-button-scope {
-    right: 18px;
-    bottom: 140px;
+    width: 58px;
+    height: 40px;
+  }
+
+  .touch-button-jump {
+    bottom: max(108px, env(safe-area-inset-bottom, 0px) + 102px);
+  }
+
+  .touch-button-reload,
+  .touch-button-scope {
+    bottom: max(98px, env(safe-area-inset-bottom, 0px) + 92px);
   }
 
   .touch-button-reload {
-    right: 98px;
-    bottom: 140px;
+    right: max(150px, env(safe-area-inset-right, 0px) + 144px);
+  }
+
+  .touch-button-scope {
+    right: max(88px, env(safe-area-inset-right, 0px) + 82px);
+  }
+
+  .touch-button-fire {
+    right: max(14px, env(safe-area-inset-right, 0px) + 8px);
+    bottom: max(122px, env(safe-area-inset-bottom, 0px) + 116px);
+    width: 68px;
+    height: 68px;
+    font-size: 11px;
+  }
+
+  body.touch-device .cs-bottom-left,
+  body.touch-device .cs-bottom-right {
+    min-width: 100px;
+    padding: 6px 8px 7px;
+  }
+
+  body.touch-device .cs-bottom-left .cs-big,
+  body.touch-device .cs-bottom-right .cs-ammo {
+    font-size: 22px;
   }
 }
