@@ -1,6 +1,6 @@
 export const ENEMY = {
 animations: "./assets/anim.glb",
-models: ["./assets/zombie1.glb", "./assets/zombie2.glb", "./assets/zombie3.glb", "./assets/zombie6.glb"],
+models: ["./assets/zombie1.glb", "./assets/zombie2.glb", "./assets/zombie3.glb", "./assets/zombie6.glb", "./assets/zombie8.glb"],
 attackSound: "./assets/enemy.ogg",
 positionY: 1.2,
 scale: [1.2, 1.2, -1.2],
