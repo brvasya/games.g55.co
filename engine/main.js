@@ -958,6 +958,7 @@ function startSniperBulletCamera(shot, direction, hit, config = {}) {
   positionSniperBulletCamera(true);
   updateSniperBulletTrail();
   hud.hideScope();
+  hud.setCrosshairVisible(false);
 
   return true;
 }
@@ -1265,6 +1266,7 @@ function finishSniperBulletCamera() {
   if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
   if (sniperBulletCam.trail) sniperBulletCam.trail.visible = false;
 
+  hud.setCrosshairVisible(true);
   if (isZooming) hud.showScope();
 }
 
@@ -1281,6 +1283,8 @@ function cancelSniperBulletCamera() {
 
   if (sniperBulletCam.projectile) sniperBulletCam.projectile.visible = false;
   if (sniperBulletCam.trail) sniperBulletCam.trail.visible = false;
+
+  hud.setCrosshairVisible(true);
 }
 
 function spawnTracer(direction) {
