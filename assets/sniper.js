@@ -21,7 +21,7 @@ isSniper: true
 anim: {
 idle: "a_idle_1",
 shoot: "shoot",
-reload: "reload_fast"
+reload: ["reload", "reload_1", "reload_end"]
 },
 model: "./assets/sniper.glb",
 fireSound: "./assets/sniper.ogg"
