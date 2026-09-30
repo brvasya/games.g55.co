@@ -10,7 +10,7 @@ attachmentRotation: [0, Math.PI/2, 0],
 muzzleFlash: "muzzle_flash",
 shellEject: "shell",
 behavior: {
-magazineSize: 200,
+magazineSize: 20,
 damage: 35,
 fireCooldownMs: 90,
 reloadSpeed: 1,

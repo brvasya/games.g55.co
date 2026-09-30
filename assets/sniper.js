@@ -1,27 +1,27 @@
 export const SNIPER = {
 name: "Sniper Rifle",
 view: {
-posOffset: [3, -3, -8],
+posOffset: [0, -1, 5],
 rotOffset: [0, -Math.PI, 0],
 scl: [1, 1, 1]
 },
-attachment: "boneName",
-attachmentRotation: [0, 0, 0],
-muzzleFlash: "boneName",
-shellEject: "tag_ads",
+attachment: "flashlight",
+attachmentRotation: [0, Math.PI/2, 0],
+muzzleFlash: "muzzle_flash",
+shellEject: "shell",
 behavior: {
-magazineSize: 8,
+magazineSize: 10,
 damage: 240,
-fireCooldownMs: 600,
-reloadSpeed: 3,
+fireCooldownMs: 1000,
+reloadSpeed: 1,
 pellets: 1,
 spread: 0,
 isSniper: true
 },
 anim: {
-idle: "idle",
+idle: "a_idle_1",
 shoot: "shoot",
-reload: "reload"
+reload: "reload_fast"
 },
 model: "./assets/sniper.glb",
 fireSound: "./assets/sniper.ogg"
