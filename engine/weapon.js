@@ -549,7 +549,8 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     const startDuration = getActionDuration(segmentedReload.startAction, "reload");
     const loopDuration = getActionDuration(segmentedReload.loopAction, "reload");
     const endDuration = getActionDuration(segmentedReload.endAction, "reload");
-    const duration = startDuration + loopDuration * shellCount + endDuration;
+    const loopCount = Math.max(0, shellCount - 1);
+    const duration = startDuration + loopDuration * loopCount + endDuration;
 
     reloadStartedAt = performance.now();
     reloadDuration = duration;
@@ -558,7 +559,16 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     playAction(segmentedReload.startAction, "reload", false);
 
     reloadTimer = setTimeout(() => {
-      runReloadShellLoop(slot, segmentedReload, shellCount, sequenceId);
+      if (!isReloading || sequenceId !== reloadSequenceId) return;
+
+      // reload_start inserts the first shell.
+      if (slot.ammo < slot.magazineSize && slot.reserveAmmo > 0) {
+        slot.ammo += 1;
+        slot.reserveAmmo -= 1;
+        notifyStateChange();
+      }
+
+      runReloadShellLoop(slot, segmentedReload, loopCount, sequenceId);
     }, startDuration);
 
     return { started: true, duration, shellCount };
