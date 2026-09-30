@@ -29,32 +29,26 @@ export function createEnemies({
   };
 
   const HIT_TUNING = {
-    // Hitboxes are generated once from the bind-pose skin weights. Each vertex
-    // belongs to its strongest influencing bone, which keeps boxes tight and
-    // prevents low-weight root/helper influences from creating huge hitboxes.
+    // One global policy for every skinned model; no per-enemy box dimensions.
+    // Each vertex belongs only to its strongest valid influencing bone.
     minDominantWeight: 0.05,
-    paddingRatio: 0.08,
-    minPadding: 0.004,
-    broadPhaseScale: 1.2
+    bodyPaddingRatio: 0.04, // Per side, relative to EACH axis (not the longest).
+    headScale: 1.0, // Unpadded geometry fit; scale around the box center.
+    minThicknessRatio: 0.0001 // Only prevents numerically flat boxes; no unit floor.
   };
 
-  // Reused scratch objects keep bullet tests allocation-free.
-  const broadHitSphere = new THREE.Sphere();
-  const broadHitCenter = new THREE.Vector3();
+  // Reused scratch objects keep the hit-test loops allocation-free.
   const hitInverseMatrix = new THREE.Matrix4();
+  const hitNormalMatrix = new THREE.Matrix3();
   const hitLocalRay = new THREE.Ray();
   const hitLocalPoint = new THREE.Vector3();
   const hitWorldPoint = new THREE.Vector3();
   const hitLocalNormal = new THREE.Vector3();
   const hitWorldNormal = new THREE.Vector3();
   const hitBoxSize = new THREE.Vector3();
-  const hitBoxPadding = new THREE.Vector3();
+  const hitBoxCenter = new THREE.Vector3();
   const hitBuildVertex = new THREE.Vector3();
-  const hitBuildWorldVertex = new THREE.Vector3();
   const hitBuildBoneVertex = new THREE.Vector3();
-  const hitBroadBounds = new THREE.Box3();
-  const hitTransformedBox = new THREE.Box3();
-  const hitBroadSphereBuild = new THREE.Sphere();
   const bestHitPoint = new THREE.Vector3();
   const bestHitNormal = new THREE.Vector3();
 
@@ -444,7 +438,7 @@ export function createEnemies({
       isHitReacting: false,
       hitTimer: 0,
       hitboxes: [],
-      broadHitVolume: null,
+      broadHitBounds: null,
       model: null,
       groundY: y,
       verticalVelocity: 0,
@@ -526,12 +520,10 @@ export function createEnemies({
     const model = enemy?.userData?.model;
     if (!model) return;
 
-    // Skin-weight analysis is cached per visual GLB. Only the first enemy using
-    // a model scans its vertices; later clones reuse the local bone-box template.
+    // Templates contain only bind-space data and node paths. They are safe to
+    // share across clones with different placement, scale, rotation and poses.
     const cacheKey = enemy.userData.modelSrc || null;
     let template = cacheKey ? hitboxTemplateCache.get(cacheKey) : null;
-
-    enemy.updateWorldMatrix(true, true);
 
     if (!template) {
       template = buildEnemyBoneHitboxTemplate(model);
@@ -542,41 +534,29 @@ export function createEnemies({
 
     for (const entry of template) {
       const bone = resolveNodeIndexPath(model, entry.path);
-      if (!bone?.isBone) continue;
+      const mesh = resolveNodeIndexPath(model, entry.meshPath);
+      if (!bone?.isBone || !mesh?.isSkinnedMesh) continue;
 
       hitboxes.push({
         bone,
+        mesh,
         name: entry.name,
+        headshot: entry.headshot,
         vertexCount: entry.vertexCount,
         box: new THREE.Box3(
-          new THREE.Vector3(entry.min[0], entry.min[1], entry.min[2]),
-          new THREE.Vector3(entry.max[0], entry.max[1], entry.max[2])
-        )
+          new THREE.Vector3(...entry.min),
+          new THREE.Vector3(...entry.max)
+        ),
+        // Keep skin instances separate: two meshes may use the same bones but
+        // different inverse binds or detached skin transforms.
+        matrixWorld: new THREE.Matrix4(),
+        worldBounds: new THREE.Box3(),
+        active: false
       });
     }
 
     enemy.userData.hitboxes = hitboxes;
-
-    // Build one cheap broad-phase sphere from the bone boxes. This uses only a
-    // handful of boxes, not the skinned vertices, and is done once per enemy.
-    hitBroadBounds.makeEmpty();
-
-    for (const hitbox of hitboxes) {
-      hitTransformedBox.copy(hitbox.box).applyMatrix4(hitbox.bone.matrixWorld);
-      hitBroadBounds.union(hitTransformedBox);
-    }
-
-    if (!hitBroadBounds.isEmpty()) {
-      hitBroadBounds.getBoundingSphere(hitBroadSphereBuild);
-      const localCenter = enemy.worldToLocal(hitBroadSphereBuild.center.clone());
-
-      enemy.userData.broadHitVolume = {
-        center: localCenter,
-        radius: hitBroadSphereBuild.radius * HIT_TUNING.broadPhaseScale
-      };
-    } else {
-      enemy.userData.broadHitVolume = null;
-    }
+    enemy.userData.broadHitBounds = new THREE.Box3();
 
     if (hitboxes.length === 0) {
       console.warn("Enemy skinned model produced no automatic bone hitboxes");
@@ -584,7 +564,7 @@ export function createEnemies({
   }
 
   function buildEnemyBoneHitboxTemplate(model) {
-    const boneBounds = new Map();
+    const template = [];
     let skinnedMeshCount = 0;
 
     model.traverse(object => {
@@ -595,103 +575,166 @@ export function createEnemies({
       const skinIndex = geometry.attributes.skinIndex;
       const skinWeight = geometry.attributes.skinWeight;
       const bones = object.skeleton.bones || [];
+      const inverses = object.skeleton.boneInverses || [];
+      const meshPath = getNodeIndexPath(object, model);
 
-      if (!position || !skinIndex || !skinWeight || !bones.length) return;
-
+      if (!position || !skinIndex || !skinWeight || !bones.length || !meshPath) return;
       skinnedMeshCount++;
-      object.updateWorldMatrix(true, false);
 
-      const inverseByBone = new Map();
-      for (const bone of bones) {
-        if (!bone) continue;
-        bone.updateWorldMatrix(true, false);
-        inverseByBone.set(bone, bone.matrixWorld.clone().invert());
-      }
+      const entries = bones.map((bone, index) => {
+        const inverseBind = inverses[index];
+        if (!bone?.isBone || !inverseBind || !object.bindMatrix) return null;
+        const path = getNodeIndexPath(bone, model);
+        if (!path) return null;
+
+        // Geometry -> bind space -> this bone's local space. Never infer a bind
+        // pose from the CURRENT world matrices; the model may already be posed.
+        const fromGeometry = new THREE.Matrix4().multiplyMatrices(
+          inverseBind, object.bindMatrix
+        );
+        if (!fromGeometry.elements.every(Number.isFinite) || fromGeometry.determinant() === 0) {
+          return null;
+        }
+
+        return {
+          path,
+          fromGeometry,
+          box: new THREE.Box3(),
+          vertexCount: 0,
+          name: bone.name || `bone_${index}`,
+          headshot: isHeadshotBone(bone.name)
+        };
+      });
 
       const influenceCount = Math.min(4, skinWeight.itemSize, skinIndex.itemSize);
+      const vertexCount = Math.min(position.count, skinIndex.count, skinWeight.count);
+      const indices = geometry.index;
+      const drawCount = indices ? indices.count : position.count;
+      const start = Math.max(0, Math.floor(geometry.drawRange?.start || 0));
+      const end = Math.min(drawCount, start + (geometry.drawRange?.count ?? Infinity));
+      const visited = indices ? new Uint8Array(vertexCount) : null;
 
-      for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex++) {
-        let strongestWeight = -Infinity;
+      for (let drawIndex = start; drawIndex < end; drawIndex++) {
+        const vertexIndex = indices ? indices.getX(drawIndex) : drawIndex;
+        if (!Number.isInteger(vertexIndex) || vertexIndex < 0 || vertexIndex >= vertexCount) continue;
+        if (visited) {
+          if (visited[vertexIndex]) continue;
+          visited[vertexIndex] = 1;
+        }
+
+        let strongestWeight = 0;
         let strongestBoneIndex = -1;
+        let totalWeight = 0;
 
         for (let component = 0; component < influenceCount; component++) {
           const weight = getAttributeComponent(skinWeight, vertexIndex, component);
-          if (weight <= strongestWeight) continue;
+          const boneIndex = getAttributeComponent(skinIndex, vertexIndex, component);
+          if (!Number.isFinite(weight) || weight <= 0 || !Number.isInteger(boneIndex)) continue;
+          if (boneIndex < 0 || boneIndex >= entries.length || !entries[boneIndex]) continue;
 
+          totalWeight += weight;
+          if (weight <= strongestWeight) continue;
           strongestWeight = weight;
-          strongestBoneIndex = Math.round(
-            getAttributeComponent(skinIndex, vertexIndex, component)
-          );
+          strongestBoneIndex = boneIndex;
         }
 
-        if (
-          strongestWeight < HIT_TUNING.minDominantWeight ||
-          strongestBoneIndex < 0 ||
-          strongestBoneIndex >= bones.length
-        ) {
+        if (strongestBoneIndex < 0 || strongestWeight / totalWeight < HIT_TUNING.minDominantWeight) {
           continue;
         }
 
-        const bone = bones[strongestBoneIndex];
-        const boneInverse = inverseByBone.get(bone);
-        if (!bone || !boneInverse) continue;
-
-        let entry = boneBounds.get(bone);
-        if (!entry) {
-          const path = getNodeIndexPath(bone, model);
-          if (!path) continue;
-
-          entry = {
-            bone,
-            path,
-            box: new THREE.Box3().makeEmpty(),
-            vertexCount: 0,
-            name: bone.name || `bone_${strongestBoneIndex}`
-          };
-          boneBounds.set(bone, entry);
-        }
-
+        const entry = entries[strongestBoneIndex];
         hitBuildVertex.fromBufferAttribute(position, vertexIndex);
-        hitBuildWorldVertex.copy(hitBuildVertex).applyMatrix4(object.matrixWorld);
-        hitBuildBoneVertex.copy(hitBuildWorldVertex).applyMatrix4(boneInverse);
+        hitBuildBoneVertex.copy(hitBuildVertex).applyMatrix4(entry.fromGeometry);
+        if (!Number.isFinite(hitBuildBoneVertex.x) ||
+            !Number.isFinite(hitBuildBoneVertex.y) ||
+            !Number.isFinite(hitBuildBoneVertex.z)) continue;
 
         entry.box.expandByPoint(hitBuildBoneVertex);
         entry.vertexCount++;
       }
+
+      for (const entry of entries) {
+        if (!entry || entry.box.isEmpty() || entry.vertexCount === 0) continue;
+
+        entry.box.getSize(hitBoxSize);
+        const maxDimension = Math.max(hitBoxSize.x, hitBoxSize.y, hitBoxSize.z);
+        if (!Number.isFinite(maxDimension) || maxDimension <= 0) continue;
+
+        entry.box.getCenter(hitBoxCenter);
+        // No absolute minimum in model units. A tiny model and a giant model
+        // receive the same proportional fit; the head gets no gameplay padding.
+        const minThickness = maxDimension * HIT_TUNING.minThicknessRatio;
+        const scale = entry.headshot ? HIT_TUNING.headScale : 1 + 2 * HIT_TUNING.bodyPaddingRatio;
+        hitBoxSize.set(
+          Math.max(hitBoxSize.x * scale, minThickness),
+          Math.max(hitBoxSize.y * scale, minThickness),
+          Math.max(hitBoxSize.z * scale, minThickness)
+        ).multiplyScalar(0.5);
+        entry.box.min.copy(hitBoxCenter).sub(hitBoxSize);
+        entry.box.max.copy(hitBoxCenter).add(hitBoxSize);
+
+        template.push({
+          path: entry.path,
+          meshPath,
+          name: entry.name,
+          headshot: entry.headshot,
+          vertexCount: entry.vertexCount,
+          min: entry.box.min.toArray(),
+          max: entry.box.max.toArray()
+        });
+      }
     });
-
-    const template = [];
-
-    for (const entry of boneBounds.values()) {
-      if (entry.box.isEmpty() || entry.vertexCount === 0) continue;
-
-      entry.box.getSize(hitBoxSize);
-      const maxDimension = Math.max(hitBoxSize.x, hitBoxSize.y, hitBoxSize.z);
-      if (!Number.isFinite(maxDimension) || maxDimension <= 0.00001) continue;
-
-      const padding = Math.max(
-        maxDimension * HIT_TUNING.paddingRatio,
-        HIT_TUNING.minPadding
-      );
-
-      hitBoxPadding.set(padding, padding, padding);
-      entry.box.min.sub(hitBoxPadding);
-      entry.box.max.add(hitBoxPadding);
-
-      template.push({
-        path: entry.path,
-        name: entry.name,
-        vertexCount: entry.vertexCount,
-        min: [entry.box.min.x, entry.box.min.y, entry.box.min.z],
-        max: [entry.box.max.x, entry.box.max.y, entry.box.max.z]
-      });
-    }
 
     if (skinnedMeshCount > 0 && template.length === 0) {
       console.warn("Enemy model has skinning data but no usable weighted bone vertices");
     }
 
     return template;
+  }
+
+  function isHitMeshVisible(mesh) {
+    for (let object = mesh; object; object = object.parent) {
+      if (!object.visible) return false;
+    }
+    const material = mesh.material;
+    return Array.isArray(material)
+      ? material.some(item => item && item.visible !== false)
+      : !!material && material.visible !== false;
+  }
+
+  function updateEnemyHitboxBounds(enemy) {
+    // Refresh parents first, then use updateMatrixWorld so SkinnedMesh also
+    // refreshes bindMatrixInverse before the skin-to-world transform is used.
+    enemy.updateWorldMatrix(true, false);
+    enemy.updateMatrixWorld(true);
+    const bounds = enemy.userData.broadHitBounds;
+    bounds.makeEmpty();
+
+    for (const hitbox of enemy.userData.hitboxes) {
+      hitbox.active = isHitMeshVisible(hitbox.mesh);
+      if (!hitbox.active) continue;
+
+      // Attached skins share the bones' world space. Detached skins also need
+      // the mesh/bind correction. Avoid redundant matrix work in the common case.
+      if (hitbox.mesh.bindMode === "attached") {
+        hitbox.matrixWorld.copy(hitbox.bone.matrixWorld);
+      } else {
+        hitbox.matrixWorld.multiplyMatrices(
+          hitbox.mesh.matrixWorld, hitbox.mesh.bindMatrixInverse
+        ).multiply(hitbox.bone.matrixWorld);
+      }
+
+      // Collapsed/invalid transforms cannot be inverted for a local ray test.
+      if (!hitbox.matrixWorld.elements.every(Number.isFinite) || hitbox.matrixWorld.determinant() === 0) {
+        hitbox.active = false;
+        continue;
+      }
+
+      hitbox.worldBounds.copy(hitbox.box).applyMatrix4(hitbox.matrixWorld);
+      bounds.union(hitbox.worldBounds);
+    }
+
+    return bounds;
   }
 
   function getNodeIndexPath(node, root) {
@@ -1318,6 +1361,7 @@ export function createEnemies({
   function getHit(activeRaycaster) {
     let bestEnemy = null;
     let bestBoneName = null;
+    let bestHeadshot = false;
     let bestDistance = Infinity;
 
     const ray = activeRaycaster.ray;
@@ -1330,44 +1374,33 @@ export function createEnemies({
       const hitboxes = enemy.userData.hitboxes;
       if (!hitboxes || hitboxes.length === 0) continue;
 
-      // Update only the enemy root first. Most enemies are rejected by this
-      // broad-phase sphere without touching any animated bone matrices.
-      enemy.updateWorldMatrix(true, false);
-
-      const broad = enemy.userData.broadHitVolume;
-      if (broad) {
-        broadHitCenter.copy(broad.center).applyMatrix4(enemy.matrixWorld);
-        broadHitSphere.center.copy(broadHitCenter);
-        broadHitSphere.radius = broad.radius;
-
-        if (!ray.intersectsSphere(broadHitSphere)) continue;
-      }
-
-      // A likely target passed the broad phase. Refresh its animated hierarchy
-      // once for this shot, then ray-test bone-local boxes directly.
-      enemy.updateMatrixWorld(true);
+      // Bounds follow the CURRENT transformed boxes, not the first pose. This
+      // cannot discard an extended arm/head simply for leaving its spawn bounds.
+      const bounds = updateEnemyHitboxBounds(enemy);
+      if (bounds.isEmpty() || !ray.intersectsBox(bounds)) continue;
 
       for (const hitbox of hitboxes) {
-        const bone = hitbox.bone;
-        if (!bone) continue;
+        if (!hitbox.active || !ray.intersectsBox(hitbox.worldBounds)) continue;
 
-        hitInverseMatrix.copy(bone.matrixWorld).invert();
+        hitInverseMatrix.copy(hitbox.matrixWorld).invert();
         hitLocalRay.copy(ray).applyMatrix4(hitInverseMatrix);
-
         const localIntersection = hitLocalRay.intersectBox(hitbox.box, hitLocalPoint);
         if (!localIntersection) continue;
 
-        hitWorldPoint.copy(localIntersection).applyMatrix4(bone.matrixWorld);
-
+        hitWorldPoint.copy(localIntersection).applyMatrix4(hitbox.matrixWorld);
         const distance = ray.origin.distanceTo(hitWorldPoint);
         if (distance < near || distance > far || distance >= bestDistance) continue;
 
         getLocalBoxHitNormal(hitbox.box, localIntersection, hitLocalNormal);
-        hitWorldNormal.copy(hitLocalNormal).transformDirection(bone.matrixWorld);
+        // Inverse-transpose is required for correct normals under nonuniform
+        // scale/shear; transforming a normal as a direction is not sufficient.
+        hitNormalMatrix.getNormalMatrix(hitbox.matrixWorld);
+        hitWorldNormal.copy(hitLocalNormal).applyMatrix3(hitNormalMatrix).normalize();
 
         bestDistance = distance;
         bestEnemy = enemy;
         bestBoneName = hitbox.name;
+        bestHeadshot = hitbox.headshot;
         bestHitPoint.copy(hitWorldPoint);
         bestHitNormal.copy(hitWorldNormal);
       }
@@ -1379,7 +1412,7 @@ export function createEnemies({
       type: "enemy",
       enemy: bestEnemy,
       bone: bestBoneName,
-      headshot: isHeadshotBone(bestBoneName),
+      headshot: bestHeadshot,
       point: bestHitPoint.clone(),
       normal: bestHitNormal.clone(),
       distance: bestDistance
@@ -1388,7 +1421,23 @@ export function createEnemies({
 
   function isHeadshotBone(boneName) {
     if (!boneName) return false;
-    return String(boneName).toLowerCase().includes("head");
+    const name = String(boneName)
+      .split(/[:|/\\]/).pop() // Strip namespaces without relying on a specific rig.
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_");
+
+    // A head helper, hair, control or end marker must not grant a headshot.
+    // These bones still get ordinary damage boxes when they own geometry.
+    if (/(?:^|_)(?:helpers?|end|endsite|nub|tip|top|effector|target|ctrl|controls?|ik|pole|aim|hair|hats?|helmets?|eyes?|eyelids?|brows?|eyebrows?|jaws?|tongue|teeth|eyelashes?|ears?|attachment|socket)\d*(?:_|$)/.test(name)) {
+      return false;
+    }
+
+    // Examples: Head, Head1, Bip01 Head, ValveBiped.Bip01_Head1,
+    // mixamorig:Head, mixamorigHead and DEF-head. Unknown/numbered bones safely
+    // remain ordinary hits; never guess anatomy from height or box proportions.
+    return /(?:^|_)(?:head|mixamorighead|bip\d*head)\d*(?:_|$)/.test(name);
   }
 
   function damageEnemy(enemy, damage, { instantKill = false, headshot = false } = {}) {
