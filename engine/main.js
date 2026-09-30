@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { createPreloader } from "./preloader.js";
 import { createPlayer } from "./player.js";
 import { createTouchControls } from "./touchControls.js";
 import { renderGameTitle, controlsText, focusMenu, clearMenuSelection, trapDialogFocus } from "./ui.js";
@@ -13,6 +12,35 @@ import { createBulletHoles } from "./bulletHoles.js";
 
 const KILL_REWARD = 100;
 const HEADSHOT_REWARD = 100;
+
+function createLoadingButtonController() {
+  const button = document.getElementById("startButton");
+  let progress = 0;
+
+  function setProgress(value) {
+    progress = Math.max(progress, Math.max(0, Math.min(100, Math.round(value))));
+    button.disabled = true;
+    button.dataset.loading = "true";
+    button.setAttribute("aria-busy", "true");
+    button.style.setProperty("--load-progress", `${progress}%`);
+    button.textContent = `Loading ${progress}%`;
+  }
+
+  function hide() {
+    button.disabled = false;
+    delete button.dataset.loading;
+    button.removeAttribute("aria-busy");
+    button.style.removeProperty("--load-progress");
+    button.textContent = "Start Game";
+  }
+
+  function show() {
+    setProgress(progress);
+  }
+
+  show();
+  return { setProgress, hide, show };
+}
 
 export function bootGame({ GAME_CONFIG, GAME_ASSETS }) {
 const CONFIG = {
@@ -49,7 +77,7 @@ const state = {
   isBuyMenuOpen: false
 };
 
-const preloader = createPreloader();
+const loadingButton = createLoadingButtonController();
 let bootLoadingActive = true;
 let bootReady = false;
 let startPending = false;
@@ -60,20 +88,20 @@ let lastWheelSwitch = -Infinity;
 
 THREE.DefaultLoadingManager.onStart = () => {
   if (!bootLoadingActive) return;
-  preloader.show();
-  preloader.setProgress(0);
+  loadingButton.show();
+  loadingButton.setProgress(0);
 };
 
 THREE.DefaultLoadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
   if (!bootLoadingActive || !itemsTotal) return;
 
   const progress = (itemsLoaded / itemsTotal) * 100;
-  preloader.setProgress(progress);
+  loadingButton.setProgress(progress);
 };
 
 THREE.DefaultLoadingManager.onLoad = () => {
   if (!bootLoadingActive) return;
-  preloader.setProgress(100);
+  loadingButton.setProgress(100);
 };
 
 THREE.DefaultLoadingManager.onError = url => {
@@ -290,15 +318,15 @@ async function boot() {
     createEnemySystemIfNeeded();
     await preloadAllAssets();
     await resetGame();
-    preloader.setProgress(100);
+    loadingButton.setProgress(100);
     bootLoadingActive = false;
     bootReady = true;
-    requestAnimationFrame(() => { preloader.hide(); focusMenu(dom.overlay); });
+    requestAnimationFrame(() => { loadingButton.hide(); focusMenu(dom.overlay); });
     animate();
   } catch (error) {
     console.error("Game failed to initialize:", error);
     bootLoadingActive = false;
-    preloader.hide();
+    loadingButton.hide();
 
     showOverlay("Loading Error", "The game could not load. Check your connection and try again.", "Retry");
     dom.mainMenuButton.hidden = true;
@@ -531,16 +559,20 @@ function setupOverlayButtons() {
     dom.startButton.classList.add("cs-button");
   }
 
-  if (!dom.startButton || document.getElementById("moreGamesButton")) return;
+  if (!dom.startButton) return;
 
-  dom.moreGamesButton = document.createElement("a");
-  dom.moreGamesButton.id = "moreGamesButton";
+  dom.moreGamesButton = document.getElementById("moreGamesButton");
+  if (!dom.moreGamesButton) {
+    dom.moreGamesButton = document.createElement("a");
+    dom.moreGamesButton.id = "moreGamesButton";
+    dom.moreGamesButton.textContent = "More Games";
+    dom.moreGamesButton.className = "cs-button";
+    dom.startButton.insertAdjacentElement("afterend", dom.moreGamesButton);
+  }
+
   dom.moreGamesButton.href = `https://g55.co/?utm_source=moreGamesButton&utm_medium=${encodeURIComponent(document.title)}`;
-  dom.moreGamesButton.textContent = "More Games";
-  dom.moreGamesButton.className = "cs-button";
   dom.moreGamesButton.target = "_blank";
   dom.moreGamesButton.rel = "noopener";
-  dom.startButton.insertAdjacentElement("afterend", dom.moreGamesButton);
 }
 
 

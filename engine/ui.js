@@ -1,6 +1,11 @@
 export function renderGameTitle(element, title) {
   const text = String(title ?? "").trim();
   const colon = text.indexOf(":");
+  const prefix = colon > 0 && colon < text.length - 1 ? text.slice(0, colon + 1) : "";
+  const name = prefix ? text.slice(colon + 1).trim() : text;
+  if (element.children.length === (prefix ? 2 : 1) &&
+      (element.querySelector(".main-title-prefix")?.textContent || "") === prefix &&
+      element.querySelector(".main-title-name")?.textContent === name) return;
   element.replaceChildren();
   const add = (className, value) => {
     const span = document.createElement("span");

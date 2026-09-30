@@ -1,7 +1,4 @@
 :root {
-  /* Kept unchanged because preloader.css uses this variable. */
-  --g55-blue: #0099cc;
-
   --ui-accent: #27b7eb;
   --ui-accent-bright: #59d2ff;
   --ui-accent-soft: rgba(39, 183, 235, 0.18);
@@ -853,8 +850,7 @@ button.cs-buy-action:disabled { opacity: 0.45; cursor: default; }
 }
 
 
-/* Main menu — live scene, left-aligned modern FPS layout.
-   External preloader selectors are intentionally untouched. */
+/* Main menu — live scene, left-aligned modern FPS layout. */
 body.main-menu-active #hud {
   opacity: 0;
 }
@@ -898,7 +894,6 @@ body.main-menu-active canvas {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  animation: menu-panel-in 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 #overlay.main-menu #panel::before {
@@ -983,17 +978,6 @@ body.main-menu-active canvas {
   color: #fff;
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.075);
-}
-
-@keyframes menu-panel-in {
-  from {
-    opacity: 0;
-    transform: translate3d(-12px, 8px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
 }
 
 @keyframes menu-scene-drift {
@@ -1096,8 +1080,7 @@ body.main-menu-active canvas {
 
 
 /* Narrow-screen modal centering fix.
-   Panels size against the padded overlay content area, not 100vw.
-   External preloader styles remain untouched. */
+   Panels size against the padded overlay content area, not 100vw. */
 .cs-buy-panel {
   width: min(940px, 100%);
   margin-inline: auto;
@@ -1678,6 +1661,7 @@ body.keyboard-navigation a:focus-visible { outline: 3px solid var(--ui-accent-br
 button:disabled { cursor: default; }
 #startButton[data-loading="true"] {
   cursor: wait;
+  justify-content: center !important;
   background: linear-gradient(90deg, #148bb5 var(--load-progress, 0%), rgba(10,31,42,.9) var(--load-progress, 0%));
   box-shadow: none;
 }
