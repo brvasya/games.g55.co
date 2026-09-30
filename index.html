@@ -110,6 +110,20 @@ html.ui-font-fallback { --ui-font: Arial, sans-serif; }
   transform: none;
   opacity: 1;
 }
+/* The embedded logo never takes space from the title or the action buttons. */
+#mainMenuLogo { display: none; }
+#overlay.main-menu #mainMenuLogo {
+  display: block;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 76px);
+  width: 130px;
+  height: auto;
+  aspect-ratio: 248 / 63;
+  filter: invert(1);
+  pointer-events: none;
+  user-select: none;
+}
 #overlay.main-menu #panel::before {
   content: "";
   position: absolute;
@@ -276,6 +290,7 @@ html.touch-device .controls-touch { display: inline; }
     background: linear-gradient(180deg, rgba(2,5,8,.18) 0%, rgba(2,5,8,.52) 44%, rgba(2,5,8,.96) 100%);
   }
   #overlay.main-menu #panel { width: 100%; max-width: 100%; }
+  #overlay.main-menu #mainMenuLogo { width: 110px; bottom: calc(100% + 52px); }
   #overlay.main-menu h1 { gap: 6px; max-width: 100%; margin-bottom: 16px; }
   #overlay.main-menu .main-title-prefix { font-size: clamp(16px, 4.8vw, 22px); }
   #overlay.main-menu .main-title-name { max-width: 100%; font-size: clamp(36px, 11.5vw, 56px); line-height: .94; }
@@ -303,6 +318,19 @@ html.touch-device .controls-touch { display: inline; }
 @media (max-width: 460px) {
   #overlay #panel .menu-actions,
   #overlay.main-menu #panel .menu-actions { grid-template-columns: minmax(0, 1fr); max-width: 320px; }
+}
+/* Keep branding above the title even in short desktop/landscape viewports. */
+@media (max-height: 650px) {
+  #overlay.main-menu #mainMenuLogo { max-width: 120px; bottom: calc(100% + 44px); }
+}
+@media (max-height: 500px) {
+  #overlay.main-menu #mainMenuLogo { width: 96px; bottom: calc(100% + 24px); }
+}
+@media (min-width: 701px) and (min-height: 401px) and (max-height: 460px) {
+  #overlay.main-menu .main-title-name { font-size: clamp(30px, 7vw, 54px); }
+}
+@media (max-height: 300px) {
+  #overlay.main-menu #mainMenuLogo { width: 88px; bottom: calc(100% + 22px); }
 }
 </style>
 <script type="importmap">
@@ -336,6 +364,7 @@ html.touch-device .controls-touch { display: inline; }
 <div id="damageFlash"></div>
 <div id="overlay" class="main-menu" role="dialog" aria-modal="true" aria-labelledby="panelTitle" aria-describedby="panelDescription">
 <div id="panel">
+<img id="mainMenuLogo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPgAAAA/CAYAAADNPAUHAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAhJJREFUeNrs3UFuwjAUBcDY4kg5kw/FmbiTKyRYtGoCVRPjb88sukLwcHiJDU2Saq0LMKbL/c+6rnuP6W0PkDrONnruVmrQMag9ZbvdbksONtBLKSXklEPusOV+dww+lXvzda/X627Bzd2Z/cgdJffm62flRkmGyF3fLbhyo9wxc9dXBVdulDt27rpVcOVGSXbcv5UOkrv+LLhyo9xjlPtbzuxzBuPuRBUcBqbgoOCAggMKDig4oODAlssRT1JKCfnm5Y5rhm13P92zi4I/wqSIAy53XC3H4Mgdyh9y//u/5kzRwRocUHBAwYE2LjO/+ce3lEee/pfkxhF8XK5OgoIrudwouJLLTYdr8LM/JClQWVLQkluTO4J/RrA7hDiSo+Cm63Kj4EouNwpuaSE3Cg4KDig4oOCAggMKDig4TCz6+eCp1e+0R1zhcoDcKHhbDa+sWeXGFB1QcCDmFH13fWlNCMHX4C/Wl9aEYIoOdHEEP+Eyvu9ynnWs3If9ctD4Mxc1tyM47Tgn3hQdUHBAwUHBAQUHFBxQcKBhwUPci6qUEnKQ5f5VqPufreu6ROxKjjLgz8ANz6OW+/zcSn7ujjnlCAOuJEPnjnon0xBdyb0HV5Ipciv5Sdsu9xxcSabKreQnbLvca3AlmTK3kh+87XKPwZVk6txKfuC2S7XW5wP2nqd2PGA16IaeNbfxaZjtS4ABAKJ04U5ThTiQAAAAAElFTkSuQmCC" width="248" height="63" alt="G55.CO" draggable="false" decoding="sync">
 <h1 id="panelTitle"><span class="main-title-prefix">Shooter:</span><span class="main-title-name">Zombie Survival</span></h1>
 <p id="panelDescription"><span class="controls-desktop">WASD move · Shift walk · Space jump · Mouse aim · LMB fire · RMB scope / toggle light · R reload · 1–6 / wheel weapons · B shop · Esc pause · F fullscreen</span><span class="controls-touch">Left stick move · Swipe right side to aim · Hold + drag Fire · Tap weapon to switch</span></p>
 <div class="menu-actions">
