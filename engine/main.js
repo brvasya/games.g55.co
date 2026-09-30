@@ -144,6 +144,7 @@ let enemies = null;
 const weapon = createWeaponSystem({
   THREE,
   weaponScene: weaponRoot,
+  worldScene: scene,
   weaponCamera,
   playerVelocity: player.velocity,
   weaponSlots: GAME_ASSETS.weaponSlots
@@ -165,13 +166,29 @@ const touchControls = createTouchControls({
   },
   jump: () => player.queueJump(),
   reload: () => reload(),
-  toggleScope: () => isZooming ? stopZoom() : startZoom(),
-  clearScope: () => stopZoom(),
+  toggleScope: () => {
+    const asset = weapon.getCurrentAsset();
+    if (asset.behavior.isSniper) {
+      isZooming ? stopZoom() : startZoom();
+      return;
+    }
+    if (weapon.hasFlashlightAttachment()) weapon.setFlashlight(!weapon.isFlashlightActive());
+  },
+  clearScope: () => stopSecondaryAction(),
   shop: () => { sounds.resume(); toggleBuyMenu(); },
   pause: () => { sounds.resume(); pauseGame(); },
   getWeapons: () => weapon.getShopState(),
   switchWeapon: slot => switchWeapon(slot),
-  getStatus: () => ({ ...weapon.getHudState(), canScope: Boolean(weapon.getCurrentAsset().behavior.isSniper), scoped: isZooming })
+  getStatus: () => {
+    const asset = weapon.getCurrentAsset();
+    const canScope = Boolean(asset.behavior.isSniper || weapon.hasFlashlightAttachment());
+    return {
+      ...weapon.getHudState(),
+      canScope,
+      scoped: asset.behavior.isSniper ? isZooming : weapon.isFlashlightActive(),
+      secondaryLabel: asset.behavior.isSniper ? "Scope" : "Light"
+    };
+  }
 });
 
 const impacts = createImpactParticles({ THREE, scene, colliders: world.colliders });
@@ -364,13 +381,17 @@ function setupLights() {
   });
 }
 
-function syncWeaponWorldLighting() {
+function syncWeaponWorldAnchor() {
   camera.getWorldPosition(weaponCamera.position);
   camera.getWorldQuaternion(weaponCamera.quaternion);
   weaponRoot.position.copy(weaponCamera.position);
   weaponRoot.quaternion.copy(weaponCamera.quaternion);
   weaponRoot.updateMatrixWorld(true);
   weaponCamera.updateMatrixWorld(true);
+}
+
+function syncWeaponWorldLighting() {
+  syncWeaponWorldAnchor();
   weaponScene.environment = scene.environment;
 
   for (const { source, light } of weaponLightLinks) {
@@ -469,7 +490,7 @@ function setupInput() {
   document.addEventListener("mousedown", e => {
     if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen || sniperBulletCam.active || touchControls.isPickerOpen || isTouchPortrait()) return;
     if (e.target.closest?.("button, a, #overlay, #buyMenu, #touchControls")) return;
-    if (e.button === 2) { e.preventDefault(); startZoom(); return; }
+    if (e.button === 2) { e.preventDefault(); startSecondaryAction(); return; }
     if (e.button !== 0) return;
     sounds.resume();
     player.onMouseDown(e);
@@ -478,7 +499,7 @@ function setupInput() {
 
   document.addEventListener("mouseup", e => {
     if (e.button === 2) {
-      stopZoom();
+      endSecondaryAction();
       return;
     }
 
@@ -494,7 +515,7 @@ function setupInput() {
   document.addEventListener("pointerlockchange", onPointerLockChange);
   document.addEventListener("pointerlockerror", enableFallbackLook);
   const interruptInput = () => {
-    stopZoom();
+    stopSecondaryAction();
     player.clearMovement();
     touchControls.reset();
     pauseGame();
@@ -563,7 +584,7 @@ function returnToMainMenu() {
   player.clearMovement();
   touchControls.reset();
   cancelSniperBulletCamera();
-  stopZoom();
+  stopSecondaryAction();
   if (document.pointerLockElement) document.exitPointerLock();
   document.body.classList.remove("cursor-locked", "fallback-look");
   document.body.classList.add("main-menu-active");
@@ -608,7 +629,7 @@ function pauseGame() {
   if (!state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
 
   cancelSniperBulletCamera();
-  stopZoom();
+  stopSecondaryAction();
   state.isPlaying = false;
   player.clearMovement();
   document.body.classList.remove("cursor-locked", "fallback-look");
@@ -632,7 +653,7 @@ function openBuyMenu() {
   if (!state.isPlaying || state.isGameOver || state.isWaveComplete) return;
 
   cancelSniperBulletCamera();
-  stopZoom();
+  stopSecondaryAction();
   state.isPlaying = false;
   state.isBuyMenuOpen = true;
 
@@ -698,7 +719,7 @@ function handleBuyMenuSlot(slotNumber, type = "weapon") {
   if (slot.owned) {
     if (slot.active) { closeBuyMenu(true); return; }
     if (weapon.switchSlot(slotNumber)) {
-      stopZoom();
+      stopSecondaryAction();
       playBuyMenuWeaponSound();
       updateHud();
       updateBuyMenu();
@@ -717,7 +738,7 @@ function handleBuyMenuSlot(slotNumber, type = "weapon") {
 
   state.score -= slot.price;
   weapon.switchSlot(slotNumber);
-  stopZoom();
+  stopSecondaryAction();
   playBuyMenuWeaponSound();
 
   updateHud();
@@ -786,7 +807,7 @@ function handleEnemyKilled({ headshot = false } = {}) {
 
 function showWaveComplete() {
   cancelSniperBulletCamera();
-  stopZoom();
+  stopSecondaryAction();
   state.isPlaying = false;
   state.isWaveComplete = true;
 
@@ -864,6 +885,29 @@ function stopZoom() {
   hud.hideScope();
 }
 
+function startSecondaryAction() {
+  if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
+
+  const asset = weapon.getCurrentAsset();
+  if (asset.behavior.isSniper) {
+    startZoom();
+    return;
+  }
+
+  if (weapon.hasFlashlightAttachment()) {
+    weapon.setFlashlight(!weapon.isFlashlightActive());
+  }
+}
+
+function stopSecondaryAction() {
+  stopZoom();
+  weapon.setFlashlight(false);
+}
+
+function endSecondaryAction() {
+  if (weapon.getCurrentAsset().behavior.isSniper) stopZoom();
+}
+
 function switchWeapon(slotNumber) {
   if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return false;
 
@@ -872,7 +916,7 @@ function switchWeapon(slotNumber) {
   if (!slot || !slot.owned) return false;
 
   if (weapon.switchSlot(slotNumber)) {
-    stopZoom();
+    stopSecondaryAction();
     updateHud();
     playBuyMenuWeaponSound();
     return true;
@@ -1584,7 +1628,7 @@ function takeDamage(amount) {
 
 function endGame() {
   cancelSniperBulletCamera();
-  stopZoom();
+  stopSecondaryAction();
   state.isGameOver = true;
   state.isPlaying = false;
   state.isWaveComplete = false;
@@ -1654,7 +1698,7 @@ async function resetGame() {
   dom.damageFlash.style.opacity = "0";
 
   cancelSniperBulletCamera();
-  stopZoom();
+  stopSecondaryAction();
 
   await world.ready;
   world.resetPlayer(player);
@@ -1741,6 +1785,9 @@ function renderWithCameraShake() {
   camera.rotation.x += viewPunch.pitch;
   camera.rotation.y += viewPunch.yaw;
   camera.rotation.z += cameraShake.rotationOffsetZ;
+
+  syncWeaponWorldAnchor();
+  weapon.syncWorldEffects();
 
   renderer.clear();
   renderer.render(scene, camera);

@@ -1,24 +1,25 @@
 export const MINIGUN = {
 name: "Minigun",
 view: {
-posOffset: [0, -1, 1],
+posOffset: [0, -1, 5],
 rotOffset: [0, -Math.PI, 0],
 scl: [1, 1, 1]
 },
+attachment: "flashlight",
+attachmentRotation: [0, Math.PI/2, 0],
+muzzleFlash: "muzzle_flash",
+shellEject: "shell",
 behavior: {
 magazineSize: 200,
 damage: 35,
 fireCooldownMs: 90,
-reloadSpeed: 3,
+reloadSpeed: 1,
 pellets: 1,
 spread: 0.05,
 },
-shellEject: {
-boneName: "tag_clip",
-},
 anim: {
-idle: "idle",
-shoot: "shoot",
+idle: "ta_rifle_run_trans_idle",
+shoot: "fire",
 reload: "reload"
 },
 model: "./assets/minigun.glb",

@@ -1,7 +1,7 @@
 import { createGLTFLoader } from "./gltfLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
-export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVelocity, weaponSlots }) {
+export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamera, playerVelocity, weaponSlots }) {
   const HANDS_MODEL_URL = "./assets/hands.glb";
   const VALVEBIPED_SOURCE_PREFIX = "ValveBiped.Bip01";
   const VALVEBIPED_MERGE_PREFIX = THREE.PropertyBinding.sanitizeNodeName(VALVEBIPED_SOURCE_PREFIX);
@@ -21,7 +21,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   };
 
   let currentSlotIndex = 0;
-  let lastShotTime = 0;
+  let lastShotTime = Number.NEGATIVE_INFINITY;
   let isReloading = false;
   let reloadStartedAt = 0;
   let reloadDuration = 0;
@@ -62,10 +62,60 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   let currentState = "idle";
   let currentStateTime = 0;
   let currentStateDuration = 0;
-  let flashIntensity = 0;
-  const flashMaterials = new Set();
+  let attachmentBone = null;
+  let muzzleFlashBone = null;
+  let flashlightActive = false;
+  let muzzleFlashTime = 0;
   const boneMergeLocalMatrix = new THREE.Matrix4();
   const boneMergeParentInverse = new THREE.Matrix4();
+  const effectPosition = new THREE.Vector3();
+  const effectQuaternion = new THREE.Quaternion();
+  const attachmentRotationEuler = new THREE.Euler(0, 0, 0, "XYZ");
+  const attachmentRotationQuaternion = new THREE.Quaternion();
+  const effectDirection = new THREE.Vector3();
+  const cameraForward = new THREE.Vector3();
+
+  const FLASHLIGHT_INTENSITY = 42;
+  // Keep the spotlight registered in Three.js from startup at zero intensity.
+  // Toggling .visible on the first use changes the active light set and can
+  // force a world-material shader compile, causing a noticeable flashlight delay.
+  const flashlight = new THREE.SpotLight(0xffffff, 0, 34, Math.PI / 7, 0.55, 1.35);
+  flashlight.name = "WeaponFlashlight";
+  flashlight.visible = true;
+  flashlight.castShadow = false;
+  const flashlightTarget = new THREE.Object3D();
+  flashlightTarget.name = "WeaponFlashlightTarget";
+
+  // Keep the point light in the active Three.js light set from startup.
+  // Toggling a light from invisible -> visible on the first shot can force
+  // expensive world-material shader compilation in the firing frame.
+  const muzzleLight = new THREE.PointLight(0xffc36a, 0, 6, 2);
+  muzzleLight.name = "WeaponMuzzleFlashLight";
+  muzzleLight.visible = true;
+  muzzleLight.castShadow = false;
+
+  if (worldScene) {
+    worldScene.add(flashlight, flashlightTarget, muzzleLight);
+    flashlight.target = flashlightTarget;
+  }
+
+  const muzzleFlashTexture = createMuzzleFlashTexture();
+  const muzzleFlashMaterial = new THREE.SpriteMaterial({
+    map: muzzleFlashTexture,
+    color: 0xffd27a,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+    toneMapped: false
+  });
+  const muzzleFlashSprite = new THREE.Sprite(muzzleFlashMaterial);
+  muzzleFlashSprite.name = "WeaponMuzzleFlash";
+  // Keep the sprite renderable at zero opacity so its shader is compiled
+  // before the player fires for the first time.
+  muzzleFlashSprite.visible = true;
+  muzzleFlashSprite.material.opacity = 0;
+  muzzleFlashSprite.scale.set(5.2, 5.2, 1);
 
   rig.name = "FirstPersonWeaponRig";
   resetRigTransform();
@@ -325,7 +375,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     if (!slot || !slot.owned || index === currentSlotIndex || isReloading) return false;
 
     currentSlotIndex = index;
-    lastShotTime = 0;
+    lastShotTime = Number.NEGATIVE_INFINITY;
     recoil = 0;
 
     attachCurrentModel();
@@ -372,7 +422,7 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     });
 
     currentSlotIndex = 0;
-    lastShotTime = 0;
+    lastShotTime = Number.NEGATIVE_INFINITY;
     isReloading = false;
     clearTimeout(reloadTimer);
     attachCurrentModel();
@@ -386,9 +436,8 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     if (isReloading) return { ok: false, reason: "reloading" };
     if (now - lastShotTime < slot.fireCooldownMs) return { ok: false, reason: "cooldown" };
 
-    lastShotTime = now;
-
     if (slot.isMelee) {
+      lastShotTime = now;
       play("shoot");
       addRecoil();
 
@@ -406,10 +455,14 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
     if (slot.ammo <= 0) return { ok: false, reason: "empty" };
 
-    flashIntensity = getMuzzleFlashConfig().intensity;
+    lastShotTime = now;
+    // Start the fire animation immediately, then trigger all shot effects in
+    // the same accepted-shot call. This prevents effect timing from waiting
+    // on a later animation/update frame.
+    play("shoot");
+    triggerMuzzleFlash();
     ejectShell();
     slot.ammo -= 1;
-    play("shoot");
     addRecoil();
 
     return {
@@ -548,13 +601,13 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
         object.material = object.material.clone();
       }
 
-      registerFlashMaterial(object.material);
     });
 
     rig.add(model);
     resetRigTransform();
     setupAnimations(cached.animations);
     setupValveBipedBoneMerge();
+    setupWeaponEffects();
     syncValveBipedBoneMerge();
   }
 
@@ -672,10 +725,22 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   }
 
   function clearModel() {
+    // Detach the shared effect sprite before disposing the current weapon tree.
+    // Otherwise disposeModel() would dispose the reusable muzzle flash material.
+    if (muzzleFlashSprite.parent) muzzleFlashSprite.parent.remove(muzzleFlashSprite);
+
     if (model) {
       rig.remove(model);
       disposeModel(model);
     }
+
+    muzzleFlashSprite.material.opacity = 0;
+    muzzleLight.intensity = 0;
+    muzzleFlashTime = 0;
+    flashlightActive = false;
+    flashlight.intensity = 0;
+    attachmentBone = null;
+    muzzleFlashBone = null;
 
     model = null;
     boneMergePairs = [];
@@ -683,7 +748,6 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     mixer = null;
     activeAction = null;
     actions.clear();
-    flashMaterials.clear();
     clearTimeout(returnTimer);
   }
 
@@ -767,7 +831,10 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     if (!action) return 0;
 
     clearTimeout(returnTimer);
-    if (activeAction && activeAction !== action) activeAction.fadeOut(0.06);
+    if (activeAction && activeAction !== action) {
+      if (name === "shoot") activeAction.setEffectiveWeight(0);
+      else activeAction.fadeOut(0.06);
+    }
 
     const loop = isLoopingAnimation(name);
     const rawDuration = action.getClip().duration * 1000;
@@ -775,10 +842,18 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
     action.reset();
     action.enabled = true;
+    action.setEffectiveWeight(1);
     action.timeScale = name === "shoot" ? rawDuration / currentSlot().fireCooldownMs : getAnimationSpeed(name);
     action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
     action.clampWhenFinished = !loop;
-    action.fadeIn(0.04).play();
+    if (name === "shoot") {
+      action.play();
+      // Evaluate frame zero immediately so the first fire pose is ready for
+      // the next render instead of waiting for weapon.update().
+      mixer.update(0);
+    } else {
+      action.fadeIn(0.04).play();
+    }
     activeAction = action;
     currentStateDuration = duration;
 
@@ -798,18 +873,10 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
   }
 
   function update(delta, isPlaying, inputState) {
-    if (flashIntensity > 0.01) {
-      const flash = getMuzzleFlashConfig();
-      applyMuzzleIllumination(flashIntensity, flash.color);
-      flashIntensity = THREE.MathUtils.lerp(flashIntensity, 0, 1 - Math.exp(-30 * delta));
-    } else {
-      flashIntensity = 0;
-      applyMuzzleIllumination(0);
-    }
-
     updateShells(delta);
     if (mixer) mixer.update(delta);
     syncValveBipedBoneMerge();
+    updateMuzzleFlash(delta);
 
     currentStateTime += delta;
     recoil = THREE.MathUtils.lerp(recoil, 0, 1 - Math.exp(-settings.returnSpeed * delta));
@@ -878,20 +945,32 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
 
   function getShellEjectConfig() {
     const config = currentModelConfig();
-    const shell = config.shellEject ?? {};
 
     return {
-      boneName: shell.boneName ?? null,
-      gravity: shell.gravity ?? 15,
-      life: shell.life ?? 1.5,
-      spin: shell.spin ?? 5,
-      scale: shell.scale ?? 1
+      boneName: config.shellEject ?? null,
+      gravity: 15,
+      life: 1.5,
+      spin: 5,
+      scale: 1
     };
   }
 
   function findWeaponObjectByName(name) {
     if (!model || !name) return null;
-    return model.getObjectByName(name) ?? null;
+
+    const exact = model.getObjectByName(name);
+    if (exact) return exact;
+
+    const wanted = THREE.PropertyBinding.sanitizeNodeName(String(name)).toLowerCase();
+    let match = null;
+
+    model.traverse(object => {
+      if (match || !object.name) return;
+      const runtimeName = THREE.PropertyBinding.sanitizeNodeName(String(object.name)).toLowerCase();
+      if (runtimeName === wanted) match = object;
+    });
+
+    return match;
   }
 
   function getShellEjectLocalPosition(shellConfig, target) {
@@ -966,14 +1045,158 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     }
   }
 
-  function getMuzzleFlashConfig() {
-    const config = currentModelConfig();
-    const flash = config.muzzleFlash ?? {};
+  function createMuzzleFlashTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    const center = 64;
 
-    return {
-      intensity: flash.intensity ?? 10,
-      color: flash.color ?? 0xffdd66
-    };
+    const glow = ctx.createRadialGradient(center, center, 2, center, center, 58);
+    glow.addColorStop(0, "rgba(255,255,235,1)");
+    glow.addColorStop(0.12, "rgba(255,225,135,1)");
+    glow.addColorStop(0.42, "rgba(255,145,45,0.82)");
+    glow.addColorStop(1, "rgba(255,90,15,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 128, 128);
+
+    ctx.save();
+    ctx.translate(center, center);
+    ctx.globalCompositeOperation = "lighter";
+    for (const rotation of [0, Math.PI / 2, Math.PI / 4, -Math.PI / 4]) {
+      ctx.rotate(rotation);
+      const streak = ctx.createLinearGradient(-58, 0, 58, 0);
+      streak.addColorStop(0, "rgba(255,130,40,0)");
+      streak.addColorStop(0.5, "rgba(255,245,200,0.9)");
+      streak.addColorStop(1, "rgba(255,130,40,0)");
+      ctx.fillStyle = streak;
+      ctx.fillRect(-58, -2.2, 116, 4.4);
+      ctx.rotate(-rotation);
+    }
+    ctx.restore();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  function setupWeaponEffects() {
+    const config = currentModelConfig();
+    attachmentBone = findWeaponObjectByName(config.attachment);
+    muzzleFlashBone = findWeaponObjectByName(config.muzzleFlash);
+
+    if (config.attachment && !attachmentBone) {
+      console.warn(`Missing weapon flashlight attachment bone: ${config.attachment}`);
+    }
+
+    if (config.muzzleFlash && !muzzleFlashBone) {
+      console.warn(`Missing weapon muzzle flash bone: ${config.muzzleFlash}`);
+    }
+
+    if (muzzleFlashSprite.parent) muzzleFlashSprite.parent.remove(muzzleFlashSprite);
+    if (muzzleFlashBone) {
+      muzzleFlashBone.add(muzzleFlashSprite);
+      muzzleFlashSprite.position.set(0, 0, 0);
+      muzzleFlashSprite.visible = true;
+      muzzleFlashSprite.material.opacity = 0;
+    }
+
+    setFlashlight(false);
+  }
+
+  function triggerMuzzleFlash() {
+    if (!muzzleFlashBone) return;
+
+    muzzleFlashTime = 0.055;
+    muzzleFlashSprite.material.opacity = 1;
+    muzzleFlashSprite.material.rotation = Math.random() * Math.PI;
+    const scale = 4.5 + Math.random() * 1.4;
+    muzzleFlashSprite.scale.set(scale, scale, 1);
+    muzzleLight.intensity = 32;
+  }
+
+  function updateMuzzleFlash(delta) {
+    if (muzzleFlashTime <= 0 || !muzzleFlashBone) {
+      muzzleFlashTime = 0;
+      muzzleFlashSprite.material.opacity = 0;
+      muzzleLight.intensity = 0;
+      return;
+    }
+
+    muzzleFlashTime = Math.max(0, muzzleFlashTime - delta);
+    const strength = Math.min(1, muzzleFlashTime / 0.055);
+    muzzleFlashSprite.material.opacity = strength;
+    muzzleLight.intensity = 10 + 22 * strength;
+  }
+
+  function setFlashlight(active) {
+    flashlightActive = Boolean(active && attachmentBone);
+    flashlight.intensity = flashlightActive ? FLASHLIGHT_INTENSITY : 0;
+
+    // Apply the attachment transform immediately on activation instead of
+    // waiting for the next animation/update pass. The normal render sync will
+    // continue tracking the animated bone every frame after this.
+    if (flashlightActive) syncFlashlightTransform();
+  }
+
+  function hasFlashlightAttachment() {
+    return Boolean(currentModelConfig().attachment);
+  }
+
+  function isFlashlightActive() {
+    return flashlightActive;
+  }
+
+  function syncFlashlightTransform() {
+    if (!model || !attachmentBone) return;
+
+    model.updateWorldMatrix(true, true);
+    attachmentBone.getWorldPosition(effectPosition);
+    attachmentBone.getWorldQuaternion(effectQuaternion);
+    flashlight.position.copy(effectPosition);
+
+    const attachmentRotation = currentModelConfig().attachmentRotation ?? [0, 0, 0];
+    attachmentRotationEuler.set(
+      attachmentRotation[0] ?? 0,
+      attachmentRotation[1] ?? 0,
+      attachmentRotation[2] ?? 0,
+      "XYZ"
+    );
+    attachmentRotationQuaternion.setFromEuler(attachmentRotationEuler);
+    effectQuaternion.multiply(attachmentRotationQuaternion);
+
+    effectDirection.set(0, 0, 1).applyQuaternion(effectQuaternion).normalize();
+    cameraForward.set(0, 0, -1).applyQuaternion(weaponCamera.quaternion).normalize();
+    if (effectDirection.dot(cameraForward) < 0) effectDirection.negate();
+
+    flashlightTarget.position.copy(effectPosition).addScaledVector(effectDirection, 24);
+    flashlightTarget.updateMatrixWorld(true);
+  }
+
+  function syncWorldEffects() {
+    if (!model) {
+      flashlight.intensity = 0;
+      muzzleLight.intensity = 0;
+      return;
+    }
+
+    model.updateWorldMatrix(true, true);
+
+    if (attachmentBone && flashlightActive) {
+      syncFlashlightTransform();
+      flashlight.intensity = FLASHLIGHT_INTENSITY;
+    } else {
+      flashlight.intensity = 0;
+    }
+
+    if (muzzleFlashBone) {
+      // Keep the zero-intensity point light registered with the renderer so
+      // first fire never changes the scene's light-count shader variant.
+      muzzleFlashBone.getWorldPosition(muzzleLight.position);
+    } else {
+      muzzleLight.intensity = 0;
+    }
   }
 
   function getCurrentView() {
@@ -997,35 +1220,6 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     return target.set(view.rotOffset[0], view.rotOffset[1], view.rotOffset[2]);
   }
 
-  function registerFlashMaterial(material) {
-    const materials = Array.isArray(material) ? material : [material];
-
-    materials.forEach(item => {
-      if (!item || !item.emissive) return;
-      item.userData.baseEmissive = item.emissive.clone();
-      item.userData.baseEmissiveIntensity = item.emissiveIntensity ?? 1;
-      flashMaterials.add(item);
-    });
-  }
-
-  function applyMuzzleIllumination(intensity, color = 0xffdd66) {
-    const strength = Math.min(0.6, intensity * 0.06);
-
-    flashMaterials.forEach(material => {
-      if (!material.emissive) return;
-
-      if (strength <= 0.01) {
-        material.emissive.copy(material.userData.baseEmissive);
-        material.emissiveIntensity = material.userData.baseEmissiveIntensity;
-      } else {
-        material.emissive.setHex(color);
-        material.emissiveIntensity = strength;
-      }
-
-      material.needsUpdate = true;
-    });
-  }
-
   return {
     rig,
     preloadAll,
@@ -1043,6 +1237,10 @@ export function createWeaponSystem({ THREE, weaponScene, weaponCamera, playerVel
     getShopState,
     getCurrentAsset,
     addRecoil,
-    getDuration
+    getDuration,
+    setFlashlight,
+    hasFlashlightAttachment,
+    isFlashlightActive,
+    syncWorldEffects
   };
 }

@@ -229,6 +229,9 @@ export function createTouchControls(api) {
     if (!visible) return;
     const status = api.getStatus();
     scopeButton.hidden = !status.canScope;
+    const secondaryLabel = status.secondaryLabel || "Scope";
+    scopeButton.querySelector(".touch-button-label").textContent = secondaryLabel;
+    scopeButton.setAttribute("aria-label", secondaryLabel);
     scopeButton.classList.toggle("selected", status.scoped);
     scopeButton.setAttribute("aria-pressed", String(status.scoped));
     reloadButton.disabled = status.isReloading || status.ammo >= status.magazineSize || status.reserveAmmo <= 0 || status.isMelee;

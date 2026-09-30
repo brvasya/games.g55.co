@@ -17,7 +17,7 @@ export function renderGameTitle(element, title) {
 export function controlsText(touch) {
   return touch
     ? "Left stick move · Swipe right side to aim · Hold + drag Fire · Tap weapon to switch"
-    : "WASD move · Shift walk · Space jump · Mouse aim · LMB fire · RMB sniper scope · R reload · 1–6 / wheel weapons · B shop · Esc pause · F fullscreen";
+    : "WASD move · Shift walk · Space jump · Mouse aim · LMB fire · RMB scope / toggle light · R reload · 1–6 / wheel weapons · B shop · Esc pause · F fullscreen";
 }
 
 export function focusControl(element) {

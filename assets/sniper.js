@@ -5,6 +5,10 @@ posOffset: [3, -3, -8],
 rotOffset: [0, -Math.PI, 0],
 scl: [1, 1, 1]
 },
+attachment: "boneName",
+attachmentRotation: [0, 0, 0],
+muzzleFlash: "boneName",
+shellEject: "tag_ads",
 behavior: {
 magazineSize: 8,
 damage: 240,
@@ -13,9 +17,6 @@ reloadSpeed: 3,
 pellets: 1,
 spread: 0,
 isSniper: true
-},
-shellEject: {
-boneName: "tag_ads",
 },
 anim: {
 idle: "idle",
