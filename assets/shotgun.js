@@ -1,26 +1,26 @@
 export const SHOTGUN = {
 name: "Shotgun",
 view: {
-posOffset: [0, -1, 2],
+posOffset: [0, -1, 5],
 rotOffset: [0, -Math.PI, 0],
 scl: [1, 1, 1]
 },
-attachment: "boneName",
-attachmentRotation: [0, 0, 0],
-muzzleFlash: "boneName",
-shellEject: "tag_weapon",
+attachment: "flashlight",
+attachmentRotation: [0, Math.PI/2, 0],
+muzzleFlash: "muzzle_flash",
+shellEject: "shell",
 behavior: {
-magazineSize: 1,
+magazineSize: 5,
 damage: 25,
-fireCooldownMs: 120,
-reloadSpeed: 2,
+fireCooldownMs: 1200,
+reloadSpeed: 1,
 pellets: 6,
 spread: 0.1,
 },
 anim: {
-idle: "idle",
-shoot: "shoot",
-reload: "reload"
+idle: "a_idle_1",
+shoot: "fire",
+reload: "reload_fast"
 },
 model: "./assets/shotgun.glb",
 fireSound: "./assets/shotgun.ogg"
