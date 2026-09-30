@@ -147,7 +147,8 @@ const weapon = createWeaponSystem({
   worldScene: scene,
   weaponCamera,
   playerVelocity: player.velocity,
-  weaponSlots: GAME_ASSETS.weaponSlots
+  weaponSlots: GAME_ASSETS.weaponSlots,
+  onStateChange: () => updateHud()
 });
 const touchControls = createTouchControls({
   isActive: () => state.isPlaying && !state.isGameOver && !state.isWaveComplete && !state.isBuyMenuOpen && !sniperBulletCam.active,

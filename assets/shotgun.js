@@ -20,7 +20,7 @@ spread: 0.1,
 anim: {
 idle: "a_idle_1",
 shoot: "fire",
-reload: "reload_fast"
+reload: ["reload", "reload_loop", "reload_end"]
 },
 model: "./assets/shotgun.glb",
 fireSound: "./assets/shotgun.ogg"
