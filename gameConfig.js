@@ -26,7 +26,7 @@ weaponSlots: [
 { id: 3, asset: RIFLE, owned: true, price: 2400 },
 { id: 4, asset: SHOTGUN, owned: true, price: 3600 },
 { id: 5, asset: SNIPER, owned: true, price: 4200 },
-{ id: 6, asset: MINIGUN, owned: false, price: 4800 }
+{ id: 6, asset: MINIGUN, owned: true, price: 4800 }
 ],
 
 enemies: {
