@@ -462,235 +462,596 @@ p {
 
 #buyHint.hidden { display: none; }
 
-/* Buy menu */
-.cs-buy-menu {
+/* Buy menu and arcade weapon upgrades */
+
+.cs-upgrade-level {
+  display: inline-block;
+  margin-left: .55em;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: .2em .4em;
+  font-size: .65em;
+  font-weight: 700;
+  line-height: 1.1;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.cs-upgrade-level[hidden], .cs-wave-shop[hidden] { display: none !important; }
+
+.cs-wave-shop { grid-column: 1 / -1; }
+
+#buyMenu {
+  z-index: 30;
+  font-family: var(--ui-font);
   position: fixed;
   inset: 0;
-  z-index: 30;
   display: none;
-  place-items: center;
-  padding: 16px;
-  background: rgba(2, 5, 8, 0.67);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  font-family: var(--ui-font);
-}
-
-.cs-buy-menu.open { display: grid; }
-
-.cs-buy-panel {
-  width: min(940px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  padding: 24px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 12px;
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-right: max(12px, env(safe-area-inset-right));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left: max(12px, env(safe-area-inset-left));
   overflow: hidden;
-  color: var(--ui-text);
-  background: linear-gradient(180deg, rgba(16, 22, 28, 0.94), rgba(7, 11, 15, 0.97));
-  border: 1px solid var(--ui-line-strong);
-  border-radius: 16px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.56);
+  background: rgb(3 7 10 / .6);
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
 }
 
-.cs-buy-head {
+#buyMenu.open { display: flex; opacity: 1; visibility: visible; pointer-events: auto; }
+
+#buyMenu *, #buyMenu *::before, #buyMenu *::after { box-sizing: border-box; }
+
+#buyMenu button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+
+#buyMenu .cs-buy-panel {
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.56);
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(960px, 100%);
+  max-width: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: 100%;
+  margin: 0;
+  padding: 22px;
+  overflow: hidden;
+  border: 1px solid rgb(215 232 242 / .18);
+  border-radius: 16px;
+  background: linear-gradient(150deg, #10171c, #0a0f12);
+  color: var(--ui-text);
+  text-align: left;
+  font-family: inherit;
+  outline: none;
+  transform: none;
+}
+
+#buyMenu .cs-buy-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 12px;
+  gap: 12px;
+  flex-shrink: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
 }
 
-.cs-buy-title {
-  color: var(--ui-text);
-  font-size: 27px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.035em;
+#buyMenu .cs-buy-head > div { min-width: 0; }
+
+#buyMenu .cs-buy-title {
+  margin: 0;
+  font-size: clamp(20px, 2.5vw, 28px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: .02em;
   text-transform: uppercase;
 }
 
-.cs-buy-subtitle {
-  margin-top: 7px;
+#buyMenu .cs-buy-subtitle {
+  margin: 6px 0 0;
   color: var(--ui-muted);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  line-height: 1.3;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 
-.cs-buy-close {
-  flex: 0 0 auto;
+#buyMenu .cs-buy-close {
+  transition: color 110ms ease, background 110ms ease, border-color 110ms ease;
+  position: relative;
+  inset: auto;
+  flex: 0 0 40px;
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
+  min-height: 40px;
+  margin: 0;
   padding: 0;
-  color: var(--ui-muted);
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid var(--ui-line);
+  border: 1px solid rgb(255 255 255 / .14);
   border-radius: 9px;
-  font: 400 28px/1 Arial, Helvetica, sans-serif;
-  cursor: pointer;
-  transition: color 110ms ease, background 110ms ease, border-color 110ms ease, transform 110ms ease;
-}
-
-.cs-buy-close:hover {
-  color: #fff;
-  background: rgba(255, 103, 95, 0.16);
-  border-color: rgba(255, 103, 95, 0.4);
-  transform: translateY(-1px);
-}
-
-.cs-buy-close:active { transform: translateY(0); }
-
-.cs-buy-score {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  margin: 0 0 16px;
-  padding: 0 12px;
-  color: var(--ui-success);
-  background: rgba(142, 230, 138, 0.07);
-  border: 1px solid rgba(142, 230, 138, 0.16);
-  border-radius: 8px;
-  font-size: 17px;
+  background: rgb(255 255 255 / .045);
+  color: var(--ui-muted);
+  font-size: 26px;
   font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  transform: none;
+  touch-action: manipulation;
+}
+
+#buyMenu .cs-buy-score {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgb(134 230 139 / .18);
+  border-radius: 8px;
+  background: rgb(134 230 139 / .065);
+  color: var(--ui-success);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
-.cs-buy-grid {
+#buyMenu .cs-buy-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(max-content, 1fr);
+  align-content: start;
+  align-items: stretch;
   gap: 10px;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
-.cs-buy-card {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto auto 1fr 32px;
-  gap: 7px;
-  min-height: 146px;
-  padding: 16px;
+#buyMenu .cs-buy-grid::-webkit-scrollbar { display: none; }
+
+#buyMenu .cs-buy-card {
   overflow: hidden;
-  color: var(--ui-text);
-  text-align: left;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid var(--ui-line);
-  border-radius: 11px;
   cursor: pointer;
-  transition: transform 110ms ease, background 110ms ease, border-color 110ms ease, box-shadow 110ms ease;
-}
-
-.cs-buy-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: transparent;
-}
-
-.cs-buy-card:hover:not(:disabled) {
-  transform: translateY(-2px);
-  background: rgba(39, 183, 235, 0.085);
-  border-color: rgba(89, 210, 255, 0.32);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
-}
-
-.cs-buy-card:disabled {
-  cursor: default;
-  opacity: 0.56;
-}
-
-.cs-buy-card.active {
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgb(220 234 240 / .14);
+  border-radius: 11px;
+  background: rgb(255 255 255 / .03);
+  color: inherit;
+  text-align: left;
   opacity: 1;
-  background: rgba(142, 230, 138, 0.065);
-  border-color: rgba(142, 230, 138, 0.32);
+  transform: none;
+  box-shadow: none;
+  outline: none;
+  transition: background-color .15s ease, border-color .15s ease;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.cs-buy-card.active::before { background: var(--ui-success); }
+#buyMenu .cs-buy-card.locked { cursor: default; filter: saturate(.62); }
 
-.cs-buy-card.available {
-  border-color: rgba(240, 196, 91, 0.28);
+#buyMenu .cs-buy-card::before, #buyMenu .cs-buy-card::after { content: none; }
+
+#buyMenu .cs-buy-card:hover, #buyMenu .cs-buy-card:active { transform: none; }
+
+#buyMenu .cs-buy-card.active,
+#buyMenu .cs-buy-card.active:hover,
+#buyMenu .cs-buy-card.active:focus-within {
+  border-color: var(--ui-success);
+  background: rgb(134 230 139 / .055);
+  transform: none;
 }
 
-.cs-buy-card.available::before { background: var(--ui-warning); }
+/* The card-wide select target remains behind the two independent actions. */
 
-.cs-buy-card.locked { filter: saturate(0.62); }
-
-.cs-buy-key {
+#buyMenu .cs-buy-select,
+#buyMenu .cs-buy-select:hover,
+#buyMenu .cs-buy-select:focus,
+#buyMenu .cs-buy-select:active,
+#buyMenu .cs-buy-select:disabled {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  opacity: 1;
+  transform: none;
+  cursor: pointer;
+}
+
+#buyMenu .cs-buy-select:disabled { cursor: default; }
+
+#buyMenu .cs-buy-card-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 24px;
+}
+
+#buyMenu .cs-buy-name {
+  position: static;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+#buyMenu .cs-buy-key {
+  position: static;
+  flex: 0 0 24px;
   display: grid;
   place-items: center;
-  width: 25px;
-  height: 25px;
-  color: var(--ui-muted);
-  background: rgba(0, 0, 0, 0.26);
-  border: 1px solid var(--ui-line);
-  border-radius: 7px;
-  font-size: 11px;
-}
-
-.cs-buy-name {
-  padding-right: 34px;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.12;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.cs-buy-stats {
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / .12);
+  border-radius: 6px;
+  background: rgb(0 0 0 / .12);
   color: var(--ui-muted);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  line-height: 1;
 }
 
-.cs-buy-status {
-  align-self: end;
-  color: var(--ui-text);
-  font-size: 19px;
-  font-weight: 700;
-}
-
-.cs-buy-price {
-  display: inline-block;
-  transition: color 110ms ease;
-}
-
-.cs-buy-price.affordable { color: var(--ui-success); }
-.cs-buy-price.expensive { color: var(--ui-danger); }
-.cs-buy-owned-text { color: var(--ui-accent-bright); }
-
-.cs-buy-action {
-  color: var(--ui-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-button.cs-buy-action {
-  display: inline-flex;
+#buyMenu .cs-buy-card-meta {
+  flex-shrink: 0;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  min-height: 20px;
+}
+
+#buyMenu .cs-buy-stats {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  color: var(--ui-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: .01em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+#buyMenu .cs-buy-status {
+  position: static;
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+#buyMenu .cs-buy-status > span { position: static; margin: 0; font: inherit; line-height: inherit; }
+
+#buyMenu .cs-buy-owned-text { color: var(--ui-accent-bright); }
+
+#buyMenu .active .cs-buy-owned-text { color: var(--ui-success); }
+
+#buyMenu .cs-upgrade-summary {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+}
+
+#buyMenu .cs-upgrade-preview {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: #d5dce0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  opacity: 1;
+}
+
+#buyMenu .cs-upgrade-preview small { color: var(--ui-muted); font-size: 10px; line-height: 1.3; opacity: 1; }
+
+#buyMenu .cs-upgrade-level {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin: 0;
+  padding: 3px 5px;
+  border-color: rgb(255 255 255 / .25);
+  color: #cfdbe3;
+  font-size: 10px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+#buyMenu .cs-upgrade-level.complete { color: var(--ui-success); border-color: currentColor; }
+
+#buyMenu .cs-buy-actions {
+  position: relative;
+  inset: auto;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: auto 0 0;
+  padding: 0;
+}
+
+#buyMenu .cs-buy-actions.single { grid-template-columns: minmax(0, 1fr); }
+
+#buyMenu .cs-buy-actions .cs-buy-action {
+  text-transform: uppercase;
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
   justify-content: center;
-  min-height: 30px;
-  padding: 0 9px;
-  margin-top: 2px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--ui-line);
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 46px;
+  margin: 0;
+  padding: 6px 3px;
+  border: 1px solid rgb(255 255 255 / .14);
   border-radius: 7px;
+  background: rgb(255 255 255 / .04);
+  color: #d4dce0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: .025em;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  opacity: 1;
+  box-shadow: none;
+  outline: none;
+  transform: none;
+  transition: background-color .15s ease, border-color .15s ease;
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
-button.cs-buy-action:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--ui-line-strong);
+#buyMenu .cs-buy-actions .cs-buy-price { position: static; display: block; margin: 0; font-size: 12px; line-height: 1.2; }
+
+#buyMenu .cs-buy-price.affordable { color: var(--ui-success); }
+
+#buyMenu .cs-buy-price.expensive { color: var(--ui-danger); }
+
+#buyMenu .cs-buy-price.unavailable { color: var(--ui-muted); }
+
+#buyMenu .cs-buy-actions .cs-buy-action:disabled { color: var(--ui-muted); opacity: 1; cursor: default; }
+
+#buyMenu .cs-buy-actions .cs-buy-upgrade.maxed {
+  border-color: rgb(134 230 139 / .22);
+  background: rgb(134 230 139 / .05);
+  color: var(--ui-success);
+  opacity: 1;
 }
 
-button.cs-buy-action:disabled { opacity: 0.45; cursor: default; }
+#buyMenu .cs-buy-upgrade.maxed .cs-buy-price { color: var(--ui-success); }
+
+@media (hover: hover) and (pointer: fine) {
+  #buyMenu .cs-buy-card:not(.active):not(.locked):hover { border-color: rgb(220 234 240 / .3); background: rgb(255 255 255 / .045); }
+  #buyMenu .cs-buy-actions .cs-buy-action:not(:disabled):hover,
+  #buyMenu .cs-buy-close:hover { border-color: var(--ui-accent-bright); background: rgb(76 215 255 / .065); }
+}
+
+body.keyboard-navigation #buyMenu .cs-buy-select:focus,
+body.keyboard-navigation #buyMenu .cs-buy-action:focus,
+body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(--ui-accent-bright); outline-offset: -3px; }
+
+.cs-upgrade-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#buyMenu .upgrade-flash { animation: cs-upgrade-flash .65s ease-out; }
+
+@keyframes cs-upgrade-flash {
+  0%, 25% { box-shadow: inset 0 0 0 2px var(--ui-success), inset 0 0 22px rgb(134 230 139 / .12); }
+  100% { box-shadow: inset 0 0 0 0 transparent; }
+}
+
+@media (max-width: 760px) {
+  #buyMenu .cs-buy-panel { gap: 10px; padding: 14px; }
+  #buyMenu .cs-buy-card { gap: 6px; padding: 9px; }
+  #buyMenu .cs-buy-card-head { gap: 5px; min-height: 20px; }
+  #buyMenu .cs-buy-name { font-size: 13px; }
+  #buyMenu .cs-buy-key { flex-basis: 20px; width: 20px; height: 20px; }
+  #buyMenu .cs-buy-stats { font-size: 9px; }
+  #buyMenu .cs-buy-status { font-size: 10px; }
+  #buyMenu .cs-upgrade-summary { gap: 4px; }
+  #buyMenu .cs-upgrade-preview { font-size: 11px; }
+  #buyMenu .cs-upgrade-level { font-size: 9px; padding: 3px; }
+  #buyMenu .cs-buy-actions { gap: 4px; }
+  #buyMenu .cs-buy-actions .cs-buy-action { font-size: 9px; }
+}
+
+@media (max-width: 560px) and (orientation: portrait) {
+  #buyMenu .cs-buy-panel { padding: 10px; gap: 8px; }
+  #buyMenu .cs-buy-title { font-size: 18px; }
+  #buyMenu .cs-buy-score { font-size: 15px; padding: 6px 10px; }
+  #buyMenu .cs-buy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #buyMenu .cs-buy-card { padding: 8px; gap: 6px; }
+  #buyMenu .cs-buy-card-head { min-height: 32px; }
+  #buyMenu .cs-buy-card-meta { flex-wrap: wrap; align-content: flex-start; gap: 3px 6px; min-height: 28px; }
+  #buyMenu .cs-buy-stats { flex-basis: 100%; }
+  #buyMenu .cs-buy-status { text-align: left; }
+  #buyMenu .cs-upgrade-summary { position: relative; min-height: 30px; }
+  /* Use the empty right side of the status row for the level badge. */
+  #buyMenu .cs-upgrade-level { position: absolute; top: -21px; right: 0; padding: 2px 3px; }
+  #buyMenu .cs-buy-stats { font-size: 10px; }
+  #buyMenu .cs-upgrade-arrow { display: none; }
+  #buyMenu .cs-buy-actions .cs-buy-action { min-height: 44px; padding: 3px 2px; gap: 3px; line-height: 1.1; letter-spacing: 0; }
+  #buyMenu .cs-buy-actions .cs-buy-price { font-size: 10px; white-space: nowrap; letter-spacing: 0; }
+}
+
+@media (pointer: coarse) {
+  #buyMenu .cs-buy-key { display: none; }
+  #buyMenu .cs-buy-close { flex-basis: 44px; width: 44px; height: 44px; }
+}
+
+@media (max-height: 560px) {
+  #buyMenu .cs-buy-subtitle { display: none; }
+}
+
+@media (max-height: 500px) {
+  #buyMenu { padding: 6px; padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+  #buyMenu .cs-buy-panel { gap: 6px; padding: 8px; border-radius: 12px; }
+  #buyMenu .cs-buy-head { gap: 8px; }
+  #buyMenu .cs-buy-title { font-size: 18px; }
+  #buyMenu .cs-buy-subtitle { margin-top: 3px; font-size: 9px; line-height: 1.2; }
+  #buyMenu .cs-buy-close { flex-basis: 38px; width: 38px; height: 38px; min-height: 38px; }
+  #buyMenu .cs-buy-score { padding: 5px 8px; font-size: 15px; }
+  #buyMenu .cs-buy-grid { gap: 6px; }
+  #buyMenu .cs-buy-card { padding: 7px; gap: 4px; }
+  #buyMenu .cs-buy-card-head { min-height: 18px; gap: 5px; }
+  #buyMenu .cs-buy-name { font-size: 12px; }
+  #buyMenu .cs-buy-key { flex-basis: 18px; width: 18px; height: 18px; font-size: 9px; }
+  #buyMenu .cs-buy-card-meta { min-height: 14px; }
+  #buyMenu .cs-buy-stats, #buyMenu .cs-buy-status { font-size: 9px; }
+  #buyMenu .cs-upgrade-summary { min-height: 26px; gap: 4px; }
+  #buyMenu .cs-upgrade-preview { font-size: 10px; gap: 2px; line-height: 1.2; }
+  #buyMenu .cs-upgrade-preview small { font-size: 9px; line-height: 1.2; }
+  #buyMenu .cs-upgrade-level { font-size: 9px; padding: 2px 3px; }
+  #buyMenu .cs-buy-actions { gap: 4px; }
+  #buyMenu .cs-buy-actions .cs-buy-action { min-height: 42px; padding: 5px 2px; font-size: 9px; gap: 3px; letter-spacing: 0; }
+  #buyMenu .cs-buy-actions .cs-buy-price { font-size: 11px; }
+}
+
+@media (max-height: 360px) and (orientation: landscape) {
+  #buyMenu .cs-buy-head > div { max-width: calc(100% - 150px); }
+  #buyMenu .cs-buy-score { position: absolute; top: 12px; right: 56px; width: auto; min-width: 70px; }
+  #buyMenu .cs-buy-card { padding: 5px; gap: 3px; }
+  #buyMenu .cs-buy-card-head { min-height: 16px; }
+  #buyMenu .cs-buy-key { flex-basis: 16px; width: 16px; height: 16px; }
+  #buyMenu .cs-buy-card-meta { min-height: 12px; }
+  #buyMenu .cs-upgrade-summary { min-height: 24px; }
+}
+
+@media (max-width: 360px) and (orientation: portrait) {
+  #buyMenu .cs-buy-panel { gap: 8px; padding: 9px; }
+  #buyMenu .cs-buy-title { font-size: 17px; }
+  #buyMenu .cs-buy-subtitle { font-size: 9px; }
+  #buyMenu .cs-buy-grid { gap: 6px; }
+  #buyMenu .cs-buy-card { padding: 7px; gap: 4px; }
+  #buyMenu .cs-buy-name { font-size: 12px; }
+  #buyMenu .cs-upgrade-level { top: -19px; }
+  #buyMenu .cs-upgrade-preview { font-size: 10px; }
+  #buyMenu .cs-upgrade-preview small { font-size: 9px; }
+}
+
+/* Compact portrait: keep the balance in the header and all six cards visible. */
+
+@media (max-width: 360px) and (max-height: 620px) and (orientation: portrait) {
+  #buyMenu { padding: 8px; }
+  #buyMenu .cs-buy-panel { padding: 8px; gap: 6px; }
+  #buyMenu .cs-buy-head > div { max-width: calc(100% - 122px); }
+  #buyMenu .cs-buy-title { font-size: 15px; }
+  #buyMenu .cs-buy-subtitle { display: none; }
+  #buyMenu .cs-buy-score { position: absolute; top: 13px; right: 60px; width: auto; min-width: 60px; padding: 6px; font-size: 14px; }
+  #buyMenu .cs-buy-grid { gap: 6px; }
+  #buyMenu .cs-buy-card { padding: 5px; gap: 3px; }
+  #buyMenu .cs-buy-card-head { min-height: 27px; }
+  #buyMenu .cs-buy-name { font-size: 11px; line-height: 1.2; }
+  #buyMenu .cs-buy-card-meta { min-height: 26px; }
+  #buyMenu .cs-upgrade-summary { min-height: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #buyMenu .upgrade-flash { animation: none; }
+  #buyMenu .cs-buy-card, #buyMenu .cs-buy-action { transition: none; }
+}
 
 /* Headshot notification */
 #headshotMessage {
@@ -774,25 +1135,6 @@ button.cs-buy-action:disabled { opacity: 0.45; cursor: default; }
   #startButton { min-width: 190px; }
   #moreGamesButton { min-width: 126px; }
 
-  .cs-buy-panel {
-    width: calc(100vw - 20px);
-    padding: 16px;
-  }
-
-  .cs-buy-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .cs-buy-card {
-    min-height: 126px;
-    padding: 13px;
-  }
-
-  .cs-buy-title { font-size: 22px; }
-  .cs-buy-name { font-size: 14px; }
-  .cs-buy-status { font-size: 16px; }
-
   #sniperScope {
     background:
       radial-gradient(circle at center, transparent 0 40vmin, rgba(0, 0, 0, 0.985) 40.4vmin 100%),
@@ -831,24 +1173,7 @@ button.cs-buy-action:disabled { opacity: 0.45; cursor: default; }
   #moreGamesButton {
     margin-top: 9px;
   }
-
-  .cs-buy-card { min-height: 116px; }
-  .cs-buy-stats { font-size: 9px; }
 }
-
-@media (max-height: 640px) {
-  .cs-buy-panel { padding: 14px 16px; }
-  .cs-buy-head { margin-bottom: 8px; }
-  .cs-buy-score { margin-bottom: 9px; min-height: 28px; }
-  .cs-buy-card { min-height: 108px; padding: 11px 12px; gap: 4px; }
-  .cs-buy-name { font-size: 14px; }
-  .cs-buy-status { font-size: 15px; }
-  .cs-buy-title { font-size: 21px; }
-  .cs-buy-subtitle,
-  .cs-buy-stats,
-  .cs-buy-action { font-size: 9px; }
-}
-
 
 /* Main menu — live scene, left-aligned modern FPS layout. */
 body.main-menu-active #hud {
@@ -1078,13 +1403,8 @@ body.main-menu-active canvas {
   }
 }
 
-
 /* Narrow-screen modal centering fix.
    Panels size against the padded overlay content area, not 100vw. */
-.cs-buy-panel {
-  width: min(940px, 100%);
-  margin-inline: auto;
-}
 
 @media (max-width: 760px) {
   #overlay:not(.main-menu) {
@@ -1112,19 +1432,6 @@ body.main-menu-active canvas {
   #overlay:not(.main-menu) #moreGamesButton {
     margin-top: 9px;
   }
-
-  .cs-buy-menu {
-    place-items: center;
-    padding: 10px;
-  }
-
-  .cs-buy-panel {
-    width: 100%;
-    max-width: 940px;
-    max-height: calc(100dvh - 20px);
-    margin: auto;
-    overflow: hidden;
-  }
 }
 
 @media (max-width: 420px) {
@@ -1136,22 +1443,7 @@ body.main-menu-active canvas {
     padding-left: 18px;
     padding-right: 18px;
   }
-
-  .cs-buy-menu {
-    padding: 8px;
-  }
-
-  .cs-buy-panel {
-    max-height: calc(100dvh - 16px);
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .cs-buy-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
-
 
 /* Exact narrow-screen action-button sizing for pause/wave/game-over overlays. */
 @media (max-width: 760px) {
@@ -1176,178 +1468,11 @@ body.main-menu-active canvas {
   }
 }
 
-
 /* No-scrollbar UI rule: menus must fit inside the viewport. */
-.cs-buy-menu,
-.cs-buy-panel,
 #overlay,
 #panel {
   scrollbar-width: none;
 }
-
-.cs-buy-panel {
-  overflow: hidden;
-}
-
-@media (max-height: 560px) {
-  .cs-buy-menu {
-    padding: 8px;
-  }
-
-  .cs-buy-panel {
-    width: min(940px, 100%);
-    max-height: calc(100dvh - 16px);
-    padding: 10px 12px;
-    overflow: hidden;
-  }
-
-  .cs-buy-head {
-    margin-bottom: 5px;
-  }
-
-  .cs-buy-title {
-    font-size: 19px;
-  }
-
-  .cs-buy-subtitle {
-    display: none;
-  }
-
-  .cs-buy-close {
-    width: 32px;
-    height: 32px;
-    font-size: 22px;
-  }
-
-  .cs-buy-score {
-    min-height: 25px;
-    margin-bottom: 6px;
-    padding: 0 9px;
-    font-size: 14px;
-  }
-
-  .cs-buy-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .cs-buy-card {
-    min-height: 86px;
-    padding: 8px 9px;
-    gap: 2px;
-  }
-
-  .cs-buy-name {
-    font-size: 12px;
-  }
-
-  .cs-buy-status {
-    font-size: 13px;
-  }
-
-  .cs-buy-stats,
-  .cs-buy-action {
-    font-size: 8px;
-  }
-}
-
-@media (max-height: 430px) {
-  .cs-buy-panel {
-    padding: 7px 9px;
-  }
-
-  .cs-buy-head {
-    margin-bottom: 3px;
-  }
-
-  .cs-buy-title {
-    font-size: 17px;
-  }
-
-  .cs-buy-score {
-    min-height: 22px;
-    margin-bottom: 4px;
-    font-size: 12px;
-  }
-
-  .cs-buy-grid {
-    gap: 4px;
-  }
-
-  .cs-buy-card {
-    min-height: 70px;
-    padding: 6px 7px;
-    gap: 1px;
-  }
-
-  .cs-buy-stats {
-    font-size: 9px;
-    line-height: 1.2;
-  }
-
-  .cs-buy-name {
-    font-size: 11px;
-  }
-
-  .cs-buy-status {
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 360px) and (min-height: 561px) {
-  .cs-buy-panel {
-    padding: 10px;
-  }
-
-  .cs-buy-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .cs-buy-card {
-    min-height: 96px;
-    padding: 9px;
-    gap: 3px;
-  }
-}
-
-
-/* Equal weapon-card layout: every card ends with the same full-width action row. */
-.cs-buy-action,
-.cs-buy-action-spacer {
-  width: 100%;
-  min-height: 32px;
-  box-sizing: border-box;
-}
-
-button.cs-buy-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 9px;
-  margin-top: 0;
-}
-
-button.cs-buy-purchase.affordable {
-  background: rgba(142, 230, 138, 0.07);
-  border-color: rgba(142, 230, 138, 0.18);
-}
-
-button.cs-buy-purchase.expensive {
-  background: rgba(255, 103, 95, 0.045);
-  border-color: rgba(255, 103, 95, 0.13);
-}
-
-button.cs-buy-purchase:not(:disabled):hover {
-  background: rgba(142, 230, 138, 0.12);
-  border-color: rgba(142, 230, 138, 0.32);
-}
-
-.cs-buy-action-spacer {
-  display: block;
-  visibility: hidden;
-}
-
 
 /* Split main-menu game title: "Series: Subtitle". */
 #overlay.main-menu h1 {
@@ -1729,13 +1854,6 @@ button:disabled { cursor: default; }
 }
 #reloadStatus.visible { opacity: 1; }
 body.touch-device #reloadStatus, body.main-menu-active #reloadStatus, body.main-menu-active #buyHint { display: none; }
-.cs-buy-select { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; background: transparent; border: 0; cursor: pointer; }
-.cs-buy-select:disabled { cursor: default; }
-.cs-buy-select:focus-visible { outline-offset: -4px; border-radius: 10px; }
-.cs-buy-card .cs-buy-action { position: relative; z-index: 2; }
-.cs-buy-card.locked { cursor: default; }
-.cs-buy-card.locked:hover { transform: none; background: rgba(255,255,255,.035); border-color: var(--ui-line); box-shadow: none; }
-body.keyboard-navigation .cs-buy-card:focus-within { border-color: var(--ui-accent-bright); }
 @media (max-height: 560px) {
   #overlay:not(.main-menu) #panel { padding-top: 22px; padding-bottom: 18px; }
   #panel .menu-actions { margin-top: 14px; }
@@ -1757,11 +1875,4 @@ body.keyboard-navigation .cs-buy-card:focus-within { border-color: var(--ui-acce
 }
 @media (prefers-reduced-motion: reduce) {
   button, a { transition: none !important; }
-}
-
-/* Keep weapon stats visible in short windows by sharing the header row. */
-@media (max-height: 320px) {
-  .cs-buy-panel { position: relative; }
-  .cs-buy-head > div { max-width: calc(100% - 140px); }
-  .cs-buy-score { position: absolute; top: 12px; right: 54px; margin: 0; }
 }

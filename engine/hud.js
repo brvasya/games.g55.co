@@ -2,14 +2,6 @@ import { focusControl, focusMenu } from "./ui.js";
 import { isTouchDevice as detectTouch } from "./touchControls.js";
 
 export function createHud() {
-  // Scoped shop additions; existing site styles and asset definitions stay intact.
-  if (!document.getElementById("weaponUpgradeStyles")) {
-    const link = document.createElement("link");
-    link.id = "weaponUpgradeStyles";
-    link.rel = "stylesheet";
-    link.href = new URL("./weaponUpgrades.css", import.meta.url).href;
-    document.head.appendChild(link);
-  }
   const hud = document.getElementById("hud");
   const stats = document.getElementById("stats");
   const crosshair = document.getElementById("crosshair");
@@ -217,25 +209,28 @@ export function createHud() {
           : `<span class="cs-buy-price ${priceClass}">${canBuy ? "BUY" : `NEED $${weapon.price - score}`}</span>`;
       const stateClass = weapon.active ? "active" : weapon.owned ? "owned" : canBuy ? "available" : "locked";
       const level = weapon.upgradeLevel ?? 0;
-      const maxed = level >= weapon.maxUpgradeLevel;
+      const maxed = level >= (weapon.maxUpgradeLevel ?? 3);
       const next = weapon.nextUpgrade;
       const upgradePrice = weapon.upgradePrice;
       const canUpgrade = weapon.owned && next && !weapon.upgradeBlocked && score >= upgradePrice;
-      const upgradePriceClass = canUpgrade ? "affordable" : "expensive";
-      const upgradeLabel = maxed ? "MAXED" : weapon.upgradeBlocked ? "RELOAD PAUSED" : `UPGRADE → LV ${level + 1}`;
-      const upgradeCost = maxed ? "LV 3" : score < upgradePrice ? `NEED $${upgradePrice - score}` : `$${upgradePrice}`;
+      // A completed or temporarily blocked upgrade is not an unaffordable one.
+      const upgradePriceClass = maxed ? "complete" : weapon.upgradeBlocked || !next
+        ? "unavailable" : canUpgrade ? "affordable" : "expensive";
+      const upgradeLabel = maxed ? "MAXED" : weapon.upgradeBlocked ? "RELOAD PAUSED" : !next ? "UNAVAILABLE" : `UPGRADE <span class="cs-upgrade-arrow" aria-hidden="true">→ </span>LV ${level + 1}`;
+      const upgradeCost = maxed ? `LV ${level}` : !next ? "—" : score < upgradePrice ? `NEED $${upgradePrice - score}` : `$${upgradePrice}`;
       const levelBadge = weapon.owned && level > 0
-        ? `<span class="cs-upgrade-level">LV ${level}${maxed ? " · MAX" : ""}</span>` : "";
+        ? `<span class="cs-upgrade-level${maxed ? " complete" : ""}">LV ${level}${maxed ? " · MAX" : ""}</span>` : "";
       const bonusDescription = next
         ? `LV ${next.level}, bonuses versus base: +${Math.round((next.damageMultiplier - 1) * 100)}% damage, +${Math.round((next.fireRateMultiplier - 1) * 100)}% fire rate${weapon.isMelee ? "" : `, −${Math.round((1 - next.reloadDurationMultiplier) * 100)}% reload time`}.`
-        : "All three upgrades purchased.";
-      const preview = !weapon.owned
+        : maxed ? "All three upgrades purchased." : "Upgrade unavailable.";
+      const previewText = !weapon.owned
         ? '<span class="cs-upgrade-preview"><span>3 upgrade levels</span><small>Available after purchase</small></span>'
-        : `<span class="cs-upgrade-preview" title="${escapeHtml(bonusDescription)}"><span>${maxed ? "Fully upgraded" : `Next: ${formatStat(weapon.damage)} → <b>${formatStat(next.damage)} DMG</b>`}</span><small>${maxed ? "Maximum weapon power" : weapon.isMelee ? "Faster attacks" : "Faster fire + reload"}</small></span>`;
-      const upgradeAction = `<button class="cs-buy-action cs-buy-upgrade ${upgradePriceClass}${maxed ? " maxed" : ""}" data-buy-upgrade="${weapon.id}" aria-label="${maxed ? `${safeName}, maximum upgrade level` : weapon.upgradeBlocked ? `Resume play to finish reloading ${safeName} before upgrading` : `Upgrade ${safeName} to level ${level + 1} for $${upgradePrice}. ${escapeHtml(bonusDescription)}`}" type="button" ${canUpgrade ? "" : "disabled"}>
+        : `<span class="cs-upgrade-preview" title="${escapeHtml(bonusDescription)}"><span>${maxed ? "Fully upgraded" : next ? `Next: ${formatStat(weapon.damage)} → <b>${formatStat(next.damage)} DMG</b>` : "Upgrade unavailable"}</span><small>${maxed ? "Maximum weapon power" : weapon.isMelee ? "Faster attacks" : "Faster fire + reload"}</small></span>`;
+      const preview = `<div class="cs-upgrade-summary">${previewText}${levelBadge}</div>`;
+      const upgradeAction = `<button class="cs-buy-action cs-buy-upgrade ${upgradePriceClass}${maxed ? " maxed" : ""}" data-buy-upgrade="${weapon.id}" aria-label="${maxed ? `${safeName}, maximum upgrade level` : weapon.upgradeBlocked ? `Resume play to finish reloading ${safeName} before upgrading` : !next ? `Upgrade unavailable for ${safeName}` : `Upgrade ${safeName} to level ${level + 1} for $${upgradePrice}. ${escapeHtml(bonusDescription)}`}" type="button" ${canUpgrade ? "" : "disabled"}>
           <span>${upgradeLabel}</span><span class="cs-buy-price ${upgradePriceClass}">${upgradeCost}</span>
         </button>`;
-      const ammoAction = `<button class="cs-buy-action ${ammoPriceClass}" data-buy-ammo="${weapon.id}" aria-label="Buy ${weapon.magazineSize} rounds for ${safeName}, $${ammoPrice}" type="button" ${canBuyAmmo ? "" : "disabled"}>
+      const ammoAction = `<button class="cs-buy-action cs-buy-ammo ${ammoPriceClass}" data-buy-ammo="${weapon.id}" aria-label="Buy ${weapon.magazineSize} rounds for ${safeName}, $${ammoPrice}" type="button" ${canBuyAmmo ? "" : "disabled"}>
           <span>+ AMMO</span><span class="cs-buy-price ${ammoPriceClass}">$${ammoPrice}</span>
         </button>`;
       const bottomAction = weapon.owned
@@ -247,10 +242,14 @@ export function createHud() {
       return `
         <div class="cs-buy-card ${stateClass}" data-buy-slot="${weapon.id}">
           <button type="button" class="cs-buy-select" data-buy-select="${weapon.id}" aria-label="${selectionLabel}" ${canSelect ? "" : "disabled"}></button>
-          <span class="cs-buy-key">${weapon.id}</span>
-          <span class="cs-buy-name">${safeName}${levelBadge}</span>
-          <span class="cs-buy-stats">${formatStat(weapon.damage)} DMG${weapon.isMelee ? " · MELEE" : ` · ${weapon.magazineSize} MAG`}</span>
-          <span class="cs-buy-status">${status}</span>
+          <div class="cs-buy-card-head">
+            <span class="cs-buy-name">${safeName}</span>
+            <span class="cs-buy-key" aria-hidden="true">${weapon.id}</span>
+          </div>
+          <div class="cs-buy-card-meta">
+            <span class="cs-buy-stats">${formatStat(weapon.damage)} DMG${weapon.isMelee ? " · MELEE" : ` · ${weapon.magazineSize} MAG`}</span>
+            <span class="cs-buy-status">${status}</span>
+          </div>
           ${preview}
           <div class="cs-buy-actions${!weapon.owned || weapon.isMelee ? " single" : ""}">${bottomAction}</div>
         </div>
