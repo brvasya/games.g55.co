@@ -127,7 +127,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     preloadHandsAsset()
   ]).then(() => {
     attachCurrentModel();
-    play("idle");
   });
 
   function getNameFromConfig(config) {
@@ -225,7 +224,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
     return Promise.all(tasks).then(() => {
       attachCurrentModel();
-      play("idle");
     });
   }
 
@@ -380,7 +378,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     recoil = 0;
 
     attachCurrentModel();
-    play("idle");
 
     return true;
   }
@@ -426,7 +423,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     lastShotTime = Number.NEGATIVE_INFINITY;
     cancelReload();
     attachCurrentModel();
-    play("idle");
   }
 
   function shoot() {
@@ -698,7 +694,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       preloadWeaponAsset(config).then(() => {
         if (currentModelConfig() === config) {
           attachCurrentModel();
-          play("idle");
         }
       });
       return;
@@ -708,6 +703,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
     model = SkeletonUtils.clone(cached.source);
     model.name = "WeaponGLB";
+    model.visible = false;
 
     model.traverse(object => {
       if (!object.isMesh) return;
@@ -729,7 +725,13 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     setupAnimations(cached.animations);
     setupValveBipedBoneMerge();
     setupWeaponEffects();
-    syncValveBipedBoneMerge();
+
+    // Evaluate the first animated pose and merge the hands before either is
+    // exposed. Callers must not restart idle after this synchronous setup.
+    play("idle");
+    if (!activeAction) syncValveBipedBoneMerge();
+    model.visible = true;
+    if (handsModel) handsModel.visible = boneMergePairs.length > 0;
   }
 
   function setupValveBipedBoneMerge() {
@@ -767,7 +769,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     console.info(`ValveBiped bone merge active: ${boneMergePairs.length}/${handBones.size} hands bones matched`,
       unmatchedHandBones.length ? { unmatchedHandBones } : "");
 
-    hands.visible = true;
+    // attachCurrentModel reveals the hands after the initial animated pose.
   }
 
   function collectValveBipedBones(root) {
@@ -846,6 +848,8 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
   }
 
   function clearModel() {
+    if (mixer) mixer.stopAllAction();
+
     // Detach the shared effect sprite before disposing the current weapon tree.
     // Otherwise disposeModel() would dispose the reusable muzzle flash material.
     if (muzzleFlashSprite.parent) muzzleFlashSprite.parent.remove(muzzleFlashSprite);
@@ -976,9 +980,21 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     if (!action) return 0;
 
     clearTimeout(returnTimer);
-    if (activeAction && activeAction !== action) {
-      if (stateName === "shoot") activeAction.setEffectiveWeight(0);
-      else activeAction.fadeOut(0.06);
+    const previousAction = activeAction;
+    const segmentedReload = stateName === "reload" && !autoReturnToIdle;
+    // A first activation or a same-action restart has no outgoing pose to
+    // fade from. Reload segments are authored to join directly at full weight.
+    const canCrossFade = previousAction && previousAction !== action
+      && previousAction.enabled && previousAction.isScheduled()
+      && previousAction.getEffectiveWeight() >= 1 - 1e-6
+      && stateName !== "shoot" && !segmentedReload;
+
+    // Remove stale/clamped actions and interrupted fades. Only a valid
+    // outgoing action may keep contributing alongside the incoming action.
+    for (const otherAction of actions.values()) {
+      if (otherAction !== action && (!canCrossFade || otherAction !== previousAction)) {
+        otherAction.stop();
+      }
     }
 
     const loop = isLoopingAnimation(stateName);
@@ -991,16 +1007,20 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     action.timeScale = stateName === "shoot" ? rawDuration / currentSlot().fireCooldownMs : getAnimationSpeed(stateName);
     action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
     action.clampWhenFinished = !loop;
-    if (stateName === "shoot") {
-      action.play();
-      // Evaluate frame zero immediately so the first fire pose is ready for
-      // the next render instead of waiting for weapon.update().
-      mixer.update(0);
-    } else {
-      action.fadeIn(0.04).play();
+    action.play();
+    if (canCrossFade) {
+      // Equal fade durations keep total animation influence at one instead
+      // of briefly mixing the GLB's default pose into a transition.
+      previousAction.setEffectiveWeight(1).fadeOut(0.04);
+      action.fadeIn(0.04);
     }
     activeAction = action;
     currentStateDuration = duration;
+
+    // Prepare weapon AND hands in the same call, including timer-driven
+    // reload boundaries that can occur between regular frame updates.
+    mixer.update(0);
+    syncValveBipedBoneMerge();
 
     if (!loop && autoReturnToIdle) {
       returnTimer = setTimeout(() => play("idle"), duration);
