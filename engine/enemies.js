@@ -1419,6 +1419,37 @@ export function createEnemies({
     };
   }
 
+  // Snapshot one exposed point per live enemy BEFORE applying any damage.
+  // Reuses the existing animated bone boxes; no new model-specific hitbox setup.
+  function getExplosionHits(origin, radius, canReach = null) {
+    const hits = [];
+    if (!Number.isFinite(radius) || radius <= 0) return hits;
+
+    for (const enemy of enemies) {
+      if (enemy.userData.isDying || !enemy.userData.hitboxes?.length) continue;
+      const bounds = updateEnemyHitboxBounds(enemy);
+      if (bounds.isEmpty() || bounds.distanceToPoint(origin) >= radius) continue;
+      let bestDistance = radius;
+      let point = null;
+
+      for (const hitbox of enemy.userData.hitboxes) {
+        if (!hitbox.active || hitbox.worldBounds.distanceToPoint(origin) >= bestDistance) continue;
+        hitInverseMatrix.copy(hitbox.matrixWorld).invert();
+        hitLocalPoint.copy(origin).applyMatrix4(hitInverseMatrix);
+        hitbox.box.clampPoint(hitLocalPoint, hitLocalPoint);
+        hitWorldPoint.copy(hitLocalPoint).applyMatrix4(hitbox.matrixWorld);
+        const distance = origin.distanceTo(hitWorldPoint);
+        if (distance >= bestDistance) continue;
+        if (canReach && !canReach(origin, hitWorldPoint)) continue;
+        bestDistance = distance;
+        point = hitWorldPoint.clone();
+      }
+
+      if (point) hits.push({ enemy, point, distance: bestDistance });
+    }
+    return hits;
+  }
+
   function isHeadshotBone(boneName) {
     if (!boneName) return false;
     const name = String(boneName)
@@ -1546,6 +1577,7 @@ export function createEnemies({
     spawnOne,
     update,
     getHit,
+    getExplosionHits,
     damageEnemy,
     reset,
     get count() {

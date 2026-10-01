@@ -144,6 +144,8 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       fireCooldownMs: behavior.fireCooldownMs,
       spread: isMelee ? 0 : behavior.spread,
       pellets: isMelee ? 1 : behavior.pellets,
+      projectile: !isMelee && (behavior.projectile === "grenade" || behavior.projectile === "rocket")
+        ? behavior.projectile : null,
       isSniper: behavior.isSniper,
       isMelee,
       range: behavior.range
@@ -180,6 +182,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       fireCooldownMs: behavior.fireCooldownMs,
       spread: behavior.spread,
       pellets: behavior.pellets,
+      projectile: behavior.projectile,
       isSniper: behavior.isSniper,
       isMelee: behavior.isMelee,
       range: behavior.range
@@ -468,6 +471,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       damage: slot.damage,
       spread: slot.spread,
       pellets: slot.pellets,
+      projectile: slot.projectile,
       isSniper: slot.isSniper,
       isMelee: false,
       range: slot.range,
@@ -673,6 +677,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       fireCooldownMs: slot.fireCooldownMs,
       spread: slot.spread,
       pellets: slot.pellets,
+      projectile: slot.projectile,
       isSniper: slot.isSniper,
       isMelee: slot.isMelee,
       range: slot.range
@@ -1345,6 +1350,14 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     flashlightTarget.updateMatrixWorld(true);
   }
 
+  // Returns the animated helper origin in WORLD meters, not view-model units.
+  // main.js refreshes the weapon world anchor before requesting this point.
+  function getMuzzleWorldPosition(target) {
+    if (!model || !muzzleFlashBone) return null;
+    model.updateWorldMatrix(true, true);
+    return muzzleFlashBone.getWorldPosition(target);
+  }
+
   function syncWorldEffects() {
     if (!model) {
       flashlight.intensity = 0;
@@ -1413,6 +1426,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     hasScope,
     hasFlashlightAttachment,
     isFlashlightActive,
+    getMuzzleWorldPosition,
     syncWorldEffects
   };
 }

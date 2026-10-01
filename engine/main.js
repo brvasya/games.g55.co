@@ -3,6 +3,7 @@ import { createPlayer } from "./player.js";
 import { createTouchControls } from "./touchControls.js";
 import { renderGameTitle, controlsText, focusMenu, clearMenuSelection, trapDialogFocus } from "./ui.js";
 import { createWeaponSystem } from "./weapon.js";
+import { createProjectiles } from "./projectiles.js";
 import { createWorld } from "./world.js";
 import { createEnemies } from "./enemies.js";
 import { createHud } from "./hud.js";
@@ -221,6 +222,11 @@ const touchControls = createTouchControls({
 
 const impacts = createImpactParticles({ THREE, scene, colliders: world.colliders });
 const bulletHoles = createBulletHoles({ THREE, scene });
+const projectiles = createProjectiles({
+  THREE, scene, colliders: world.colliders,
+  getEnemyHit: raycaster => enemies ? enemies.getHit(raycaster) : null,
+  onExplode: handleProjectileExplosion
+});
 
 const impactRaycaster = new THREE.Raycaster();
 
@@ -609,6 +615,7 @@ function showOverlay(title, text, action) {
 }
 
 function returnToMainMenu() {
+  projectiles.clear();
   clearTimeout(gameOverOverlayTimer);
   state.isPlaying = false;
   state.isBuyMenuOpen = false;
@@ -804,6 +811,7 @@ function startWave() {
   state.waveTargetScore = getWaveEnemyLimit();
   state.enemyLimit = getWaveEnemyLimit();
 
+  projectiles.clear();
   enemies.reset();
   enemies.spawnWave(state.wave);
   updateHud();
@@ -817,8 +825,8 @@ function refillActiveEnemies() {
   }
 }
 
-function handleEnemyKilled({ headshot = false } = {}) {
-  const points = getKillScore({ headshot });
+function handleEnemyKilled({ headshot = false, count = 1 } = {}) {
+  const points = getKillScore({ headshot }) * count;
 
   if (headshot) {
     hud.showHeadshot();
@@ -826,7 +834,7 @@ function handleEnemyKilled({ headshot = false } = {}) {
   }
 
   state.score += points;
-  state.waveScore += 1;
+  state.waveScore += count;
 
   if (state.waveScore >= state.waveTargetScore) {
     enemies.reset();
@@ -838,6 +846,7 @@ function handleEnemyKilled({ headshot = false } = {}) {
 }
 
 function showWaveComplete() {
+  projectiles.clear({ effects: false });
   cancelSniperBulletCamera();
   stopSecondaryAction();
   state.isPlaying = false;
@@ -988,8 +997,15 @@ function shoot() {
     return;
   }
 
+  const asset = weapon.getCurrentAsset();
+  let projectileOrigin = null;
+  if (shot.projectile) {
+    // Capture the fire pose BEFORE a one-round launcher starts auto-reload.
+    syncWeaponWorldAnchor();
+    projectileOrigin = weapon.getMuzzleWorldPosition(new THREE.Vector3());
+  }
   addViewPunch();
-  sounds.playShoot(weapon.getCurrentAsset());
+  sounds.playShoot(asset);
   if (!shot.isMelee && shot.ammo === 0) reload();
 
   if (shot.isMelee) {
@@ -1001,6 +1017,19 @@ function shoot() {
   if (!isZooming) hud.setCrosshairFire();
 
   const pelletCount = Math.max(1, shot.pellets ?? 1);
+
+  // Launchers bypass BOTH hitscan and the sniper bullet camera. Damage
+  // belongs to the projectile snapshot and is resolved only on explosion.
+  if (shot.projectile) {
+    for (let i = 0; i < pelletCount && state.isPlaying; i++) {
+      projectiles.spawn({
+        shot, behavior: asset.behavior, origin: projectileOrigin,
+        aimOrigin: camera.position, direction: getShotDirection(shot.spread)
+      });
+    }
+    updateHud();
+    return;
+  }
 
   // Only scoped sniper shots can use the bullet camera. Non-sniper scoped
   // weapons and unscoped sniper shots stay on the normal hitscan path.
@@ -1045,6 +1074,54 @@ function shoot() {
     sounds.playEnemyHit();
   }
 
+  updateHud();
+}
+
+function handleProjectileExplosion({ position, hit, damage, radius, direction }) {
+  if (!enemies || !state.isPlaying || state.isGameOver || state.isWaveComplete) return;
+
+  const distanceToPlayer = position.distanceTo(camera.position);
+  sounds.playExplosion(distanceToPlayer);
+  const shake = Math.max(0, 1 - distanceToPlayer / 18);
+  if (shake > 0) {
+    cameraShake.damageShakeTime = Math.max(cameraShake.damageShakeTime, 0.16);
+    cameraShake.impulsePos.x += (Math.random() - 0.5) * 0.07 * shake;
+    cameraShake.impulsePos.y += 0.035 * shake;
+    cameraShake.impulseRotZ += (Math.random() - 0.5) * 0.025 * shake;
+  }
+
+  const targets = enemies.getExplosionHits(position, radius, projectiles.hasLineOfSight);
+  const directEnemy = hit?.type === "enemy" ? hit.enemy : null;
+  // A direct hit always takes full damage, including explosionRadius: 0.
+  // It is still an ordinary damage event, never an instant-kill headshot.
+  if (directEnemy && !targets.some(target => target.enemy === directEnemy)) {
+    targets.unshift({ enemy: directEnemy, point: hit.point.clone(), distance: 0 });
+  }
+
+  let kills = 0;
+  let enemyWasHit = false;
+  for (const target of targets) {
+    if (target.enemy.userData.isDying) continue;
+    const amount = target.enemy === directEnemy
+      ? damage : damage * Math.max(0, 1 - target.distance / radius);
+    if (!(amount > 0)) continue;
+    const blastDirection = target.point.clone().sub(position);
+    if (blastDirection.lengthSq() > 1e-8) blastDirection.normalize();
+    else blastDirection.copy(direction);
+    const killed = enemies.damageEnemy(target.enemy, amount);
+    impacts.spawnBlood(target.point, blastDirection, { direction: blastDirection, damage: amount });
+    enemyWasHit = true;
+    if (killed) kills += 1;
+  }
+
+  // Resolve all victims first. Refilling inside the loop would let the same
+  // explosion damage newly spawned enemies, or reset references mid-blast.
+  if (kills > 0) {
+    sounds.playEnemyDie();
+    handleEnemyKilled({ count: kills });
+  }
+  if (!state.isWaveComplete) refillActiveEnemies();
+  if (enemyWasHit) sounds.playEnemyHit();
   updateHud();
 }
 
@@ -1658,6 +1735,7 @@ function takeDamage(amount) {
 }
 
 function endGame() {
+  projectiles.clear({ effects: false });
   cancelSniperBulletCamera();
   stopSecondaryAction();
   state.isGameOver = true;
@@ -1871,6 +1949,8 @@ function animate() {
     sniperBulletCam.enemyImpact
   ) ? sniperBulletCam.enemyHitSlowMoScale : 1;
 
+  projectiles.update(document.hidden ? 0 : delta * impactTimeScale,
+    gameplayActive && state.isPlaying && !state.isGameOver && !state.isWaveComplete);
   updateTracers(delta);
   impacts.update(delta * impactTimeScale, sniperBulletCam.active ? sniperBulletCamera : camera);
   bulletHoles.update(delta);

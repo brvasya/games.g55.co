@@ -27,6 +27,47 @@ export function createSounds() {
     if (asset && asset.fireSound) playFromAsset(asset.fireSound, 1.0);
   }
 
+  let explosionNoise = null;
+
+  // Shared procedural blast sound: no additional audio asset is required.
+  function playExplosion(distance = 0) {
+    if (!ctx) return;
+    resume();
+    const t = now();
+    const volume = 0.75 / (1 + Math.max(0, distance) / 18);
+    if (!explosionNoise) explosionNoise = createNoiseBuffer(0.65);
+
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    source.buffer = explosionNoise;
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(2200, t);
+    filter.frequency.exponentialRampToValueAtTime(100, t + 0.6);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    source.start(t);
+    source.stop(t + 0.65);
+
+    const low = ctx.createOscillator();
+    const lowGain = ctx.createGain();
+    low.type = "sine";
+    low.frequency.setValueAtTime(100, t);
+    low.frequency.exponentialRampToValueAtTime(30, t + 0.45);
+    lowGain.gain.setValueAtTime(Math.max(0.001, volume * 0.85), t);
+    lowGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    low.connect(lowGain);
+    lowGain.connect(masterGain);
+    low.onended = () => { low.disconnect(); lowGain.disconnect(); };
+    low.start(t);
+    low.stop(t + 0.5);
+  }
+
   function playReload() {
     if (!ctx) return;
     resume();
@@ -170,6 +211,7 @@ export function createSounds() {
   return {
     resume,
     playShoot,
+    playExplosion,
     playReload,
     playEmpty,
     playEnemyHit,
