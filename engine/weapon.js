@@ -21,6 +21,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
   };
 
   let currentSlotIndex = 0;
+  let weaponTime = 0; // Milliseconds of active weapon simulation, never wall time.
   let lastShotTime = Number.NEGATIVE_INFINITY;
   let isReloading = false;
   let reloadStartedAt = 0;
@@ -430,7 +431,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
   function shoot() {
     const slot = currentSlot();
-    const now = performance.now();
+    const now = weaponTime;
 
     if (isReloading) return { ok: false, reason: "reloading" };
     if (now - lastShotTime < slot.fireCooldownMs) return { ok: false, reason: "cooldown" };
@@ -500,12 +501,11 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
     isReloading = true;
     const sequenceId = ++reloadSequenceId;
-    const duration = play("reload");
-    reloadStartedAt = performance.now();
+    const duration = playAction(actions.get("reload"), "reload", false);
+    reloadStartedAt = weaponTime;
     reloadDuration = duration;
 
-    clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => {
+    reloadTimer = scheduleWeaponTimer(() => {
       if (!isReloading || sequenceId !== reloadSequenceId) return;
 
       const needed = slot.magazineSize - slot.ammo;
@@ -552,13 +552,13 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     const loopCount = Math.max(0, shellCount - 1);
     const duration = startDuration + loopDuration * loopCount + endDuration;
 
-    reloadStartedAt = performance.now();
+    reloadStartedAt = weaponTime;
     reloadDuration = duration;
 
-    clearTimeout(reloadTimer);
+    reloadTimer = null;
     playAction(segmentedReload.startAction, "reload", false);
 
-    reloadTimer = setTimeout(() => {
+    reloadTimer = scheduleWeaponTimer(() => {
       if (!isReloading || sequenceId !== reloadSequenceId) return;
 
       // reload_start inserts the first shell.
@@ -584,8 +584,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
     const loopDuration = playAction(segmentedReload.loopAction, "reload", false);
 
-    clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => {
+    reloadTimer = scheduleWeaponTimer(() => {
       if (!isReloading || sequenceId !== reloadSequenceId) return;
 
       if (slot.ammo < slot.magazineSize && slot.reserveAmmo > 0) {
@@ -603,8 +602,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
     const endDuration = playAction(segmentedReload.endAction, "reload", false);
 
-    clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => finishReload(sequenceId), endDuration);
+    reloadTimer = scheduleWeaponTimer(() => finishReload(sequenceId), endDuration);
   }
 
   function finishReload(sequenceId) {
@@ -619,7 +617,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
 
   function cancelReload() {
     reloadSequenceId += 1;
-    clearTimeout(reloadTimer);
     reloadTimer = null;
     isReloading = false;
     reloadStartedAt = 0;
@@ -657,7 +654,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       reserveAmmo: slot.reserveAmmo,
       isReloading,
       magazineSize: slot.magazineSize,
-      reloadProgress: isReloading ? Math.min(1, (performance.now() - reloadStartedAt) / Math.max(1, reloadDuration)) : 0,
+      reloadProgress: isReloading ? Math.min(1, (weaponTime - reloadStartedAt) / Math.max(1, reloadDuration)) : 0,
       isMelee: slot.isMelee
     };
   }
@@ -878,7 +875,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     mixer = null;
     activeAction = null;
     actions.clear();
-    clearTimeout(returnTimer);
+    returnTimer = null;
   }
 
   function disposeModel(root) {
@@ -981,12 +978,12 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
   function playAction(action, stateName, autoReturnToIdle = true) {
     currentState = stateName;
     currentStateTime = 0;
+    returnTimer = null;
 
     if (!action) return 0;
 
-    clearTimeout(returnTimer);
     const previousAction = activeAction;
-    const segmentedReload = stateName === "reload" && !autoReturnToIdle;
+    const segmentedReload = stateName === "reload" && Array.isArray(currentModelConfig().anim?.reload);
     // A first activation or a same-action restart has no outgoing pose to
     // fade from. Reload segments are authored to join directly at full weight.
     const canCrossFade = previousAction && previousAction !== action
@@ -1022,13 +1019,13 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     activeAction = action;
     currentStateDuration = duration;
 
-    // Prepare weapon AND hands in the same call, including timer-driven
-    // reload boundaries that can occur between regular frame updates.
+    // Prepare weapon AND hands together, including transitions between
+    // reload segments within the same gameplay update.
     mixer.update(0);
     syncValveBipedBoneMerge();
 
     if (!loop && autoReturnToIdle) {
-      returnTimer = setTimeout(() => play("idle"), duration);
+      returnTimer = scheduleWeaponTimer(() => play("idle"), duration);
     }
 
     return duration;
@@ -1042,13 +1039,47 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     recoil = Math.min(1, recoil + 1);
   }
 
-  function update(delta, isPlaying, inputState) {
-    updateShells(delta);
+  function scheduleWeaponTimer(callback, duration) {
+    return { callback, at: weaponTime + Math.max(0, duration) };
+  }
+
+  function advanceWeaponTime(time) {
+    const delta = Math.max(0, time - weaponTime) / 1000;
+    weaponTime = time;
+    currentStateTime += delta;
     if (mixer) mixer.update(delta);
+  }
+
+  function updateAnimationTimers(delta) {
+    const endTime = weaponTime + delta * 1000;
+
+    // Advance the mixer to each transition before running it, then give the
+    // next clip the remaining frame time. Reload stages cannot drift apart
+    // from their ammo updates, even when a frame crosses several boundaries.
+    while (true) {
+      const timer = !returnTimer ? reloadTimer : !reloadTimer ? returnTimer
+        : returnTimer.at <= reloadTimer.at ? returnTimer : reloadTimer;
+      if (!timer || timer.at > endTime) break;
+
+      advanceWeaponTime(Math.max(weaponTime, timer.at));
+      if (timer === returnTimer) returnTimer = null;
+      if (timer === reloadTimer) reloadTimer = null;
+      timer.callback();
+    }
+
+    advanceWeaponTime(endTime);
+  }
+
+  function update(delta, isPlaying, inputState) {
+    // All weapon motion AND completion timers freeze on gameplay overlays.
+    // Keep the current action/pose so resuming continues rather than restarts.
+    if (!isPlaying) return;
+
+    updateAnimationTimers(delta);
+    updateShells(delta);
     syncValveBipedBoneMerge();
     updateMuzzleFlash(delta);
 
-    currentStateTime += delta;
     recoil = THREE.MathUtils.lerp(recoil, 0, 1 - Math.exp(-settings.returnSpeed * delta));
 
     const horizontalSpeed = Math.hypot(playerVelocity.x, playerVelocity.z);
