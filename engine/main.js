@@ -165,7 +165,7 @@ const world = createWorld({ THREE, scene, worldConfig: GAME_ASSETS.world });
 const player = createPlayer({ THREE, camera, config: CONFIG, colliders: world.colliders,
   onFallbackLook: () => {
     document.body.classList.add("fallback-look");
-    if (state.isPlaying) showNotice("Mouse capture unavailable. Hold left mouse and drag to aim and fire.");
+    if (state.isPlaying) showNotice("Mouse capture unavailable. Press L to retry, or hold left mouse and drag to aim and fire.");
   }
 });
 let enemies = null;
@@ -504,6 +504,12 @@ function setupInput() {
     }
     if (e.code === "KeyB") { e.preventDefault(); if (!e.repeat) toggleBuyMenu(); return; }
     if (sniperBulletCam.active || isTouchPortrait() || touchControls.isPickerOpen) return;
+    if (e.code === "KeyL") {
+      e.preventDefault();
+      // Retry from this key gesture without interrupting fallback drag-look.
+      if (!e.repeat && !state.isGameOver && !state.isWaveComplete) player.lockCursor();
+      return;
+    }
     if (/^(Digit|Numpad)[1-6]$/.test(e.code)) { e.preventDefault(); if (!e.repeat) switchWeapon(Number(e.code.slice(-1))); }
     if (e.code === "KeyR") { e.preventDefault(); if (!e.repeat) reload(); }
     player.onKeyDown(e);
