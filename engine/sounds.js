@@ -2,10 +2,10 @@ export function createSounds() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const ctx = AudioContextClass ? new AudioContextClass() : null;
   const masterGain = ctx ? ctx.createGain() : null;
-  const ENEMY_HIT_SOUND = "./assets/sounds/impact.ogg";
-  const JUMP_SOUND = "./assets/sounds/jump.ogg";
-  const DEATH_SOUND = "./assets/sounds/death.ogg";
-  const HIT_SOUND = "./assets/sounds/damage.ogg";
+  const ENEMY_HIT_SOUND = "./assets/impact.ogg";
+  const JUMP_SOUND = "./assets/jump.ogg";
+  const DEATH_SOUND = "./assets/death.ogg";
+  const HIT_SOUND = "./assets/damage.ogg";
   const HEADSHOT_SOUND = "./assets/headshot.ogg";
 
   if (masterGain) {
