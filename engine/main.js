@@ -836,7 +836,8 @@ function handleEnemyKilled({ headshot = false, count = 1 } = {}) {
   state.score += points;
   state.waveScore += count;
 
-  if (state.waveScore >= state.waveTargetScore) {
+  // A simultaneous self-kill must stay Game Over, even on the final enemy.
+  if (!state.isGameOver && state.waveScore >= state.waveTargetScore) {
     enemies.reset();
     showWaveComplete();
     return true;
@@ -1077,6 +1078,25 @@ function shoot() {
   updateHud();
 }
 
+// Sample head, torso and lower body so a floor blast is not measured only
+// from eye height, and partial cover protects only the points it actually hides.
+function getPlayerExplosionDamage(position, damage, radius) {
+  if (!(damage > 0) || !(radius > 0)) return 0;
+
+  const point = camera.position.clone();
+  let distance = radius;
+  for (const offset of [0, CONFIG.playerHeight * 0.5, CONFIG.playerHeight - 0.2]) {
+    point.copy(camera.position);
+    point.y -= offset;
+    const candidate = position.distanceTo(point);
+    if (candidate >= distance || !projectiles.hasLineOfSight(position, point)) continue;
+    distance = candidate;
+  }
+
+  // Match enemy splash falloff, but keep player HP integer-valued for the HUD.
+  return distance < radius ? Math.max(1, Math.round(damage * (1 - distance / radius))) : 0;
+}
+
 function handleProjectileExplosion({ position, hit, damage, radius, direction }) {
   if (!enemies || !state.isPlaying || state.isGameOver || state.isWaveComplete) return;
 
@@ -1090,6 +1110,7 @@ function handleProjectileExplosion({ position, hit, damage, radius, direction })
     cameraShake.impulseRotZ += (Math.random() - 0.5) * 0.025 * shake;
   }
 
+  const playerDamage = getPlayerExplosionDamage(position, damage, radius);
   const targets = enemies.getExplosionHits(position, radius, projectiles.hasLineOfSight);
   const directEnemy = hit?.type === "enemy" ? hit.enemy : null;
   // A direct hit always takes full damage, including explosionRadius: 0.
@@ -1114,13 +1135,17 @@ function handleProjectileExplosion({ position, hit, damage, radius, direction })
     if (killed) kills += 1;
   }
 
+  // Resolve self-damage before scoring: a lethal blast takes precedence over
+  // completing the wave, while enemies killed by that blast still award points.
+  if (playerDamage > 0) takeDamage(playerDamage);
+
   // Resolve all victims first. Refilling inside the loop would let the same
   // explosion damage newly spawned enemies, or reset references mid-blast.
   if (kills > 0) {
     sounds.playEnemyDie();
     handleEnemyKilled({ count: kills });
   }
-  if (!state.isWaveComplete) refillActiveEnemies();
+  if (state.isPlaying && !state.isGameOver && !state.isWaveComplete) refillActiveEnemies();
   if (enemyWasHit) sounds.playEnemyHit();
   updateHud();
 }
@@ -1727,7 +1752,8 @@ function takeDamage(amount) {
   dom.damageFlash.style.background = "rgba(255, 0, 0, 0.35)";
   dom.damageFlash.style.opacity = "1";
   setTimeout(() => {
-    if (!state.isGameOver && !state.isWaveComplete) dom.damageFlash.style.opacity = "0";
+    // A wave-ending blast must not leave the nonlethal red flash stuck onscreen.
+    if (!state.isGameOver) dom.damageFlash.style.opacity = "0";
   }, 120);
 
   sounds.playPlayerHit();
