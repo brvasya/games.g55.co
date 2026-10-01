@@ -16,7 +16,7 @@ fireCooldownMs: 120,
 reloadSpeed: 1,
 pellets: 1,
 spread: 0.05,
-isScoped: true
+isSniper: false
 },
 anim: {
 idle: "idling",
