@@ -1305,6 +1305,12 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     if (flashlightActive) syncFlashlightTransform();
   }
 
+  function hasScope() {
+    const behavior = currentModelConfig().behavior;
+    // Existing snipers keep their scope; other weapons opt in independently.
+    return !behavior.isMelee && Boolean(behavior.hasScope || behavior.isSniper);
+  }
+
   function hasFlashlightAttachment() {
     return Boolean(currentModelConfig().attachment);
   }
@@ -1404,6 +1410,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     addRecoil,
     getDuration,
     setFlashlight,
+    hasScope,
     hasFlashlightAttachment,
     isFlashlightActive,
     syncWorldEffects

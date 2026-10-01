@@ -196,8 +196,7 @@ const touchControls = createTouchControls({
   jump: () => player.queueJump(),
   reload: () => reload(),
   toggleScope: () => {
-    const asset = weapon.getCurrentAsset();
-    if (asset.behavior.isSniper) {
+    if (weapon.hasScope()) {
       isZooming ? stopZoom() : startZoom();
       return;
     }
@@ -209,13 +208,13 @@ const touchControls = createTouchControls({
   getWeapons: () => weapon.getShopState(),
   switchWeapon: slot => switchWeapon(slot),
   getStatus: () => {
-    const asset = weapon.getCurrentAsset();
-    const canScope = Boolean(asset.behavior.isSniper || weapon.hasFlashlightAttachment());
+    const hasScope = weapon.hasScope();
+    const canScope = hasScope || weapon.hasFlashlightAttachment();
     return {
       ...weapon.getHudState(),
       canScope,
-      scoped: asset.behavior.isSniper ? isZooming : weapon.isFlashlightActive(),
-      secondaryLabel: asset.behavior.isSniper ? "Scope" : "Light"
+      scoped: hasScope ? isZooming : weapon.isFlashlightActive(),
+      secondaryLabel: hasScope ? "Scope" : "Light"
     };
   }
 });
@@ -897,7 +896,7 @@ function startZoom() {
   if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
 
   const asset = weapon.getCurrentAsset();
-  if (!asset.behavior.isSniper) return;
+  if (!weapon.hasScope()) return;
 
   isZooming = true;
   const zoomFov = asset.behavior.zoomFov ?? 10;
@@ -921,8 +920,7 @@ function stopZoom() {
 function startSecondaryAction() {
   if (sniperBulletCam.active || !state.isPlaying || state.isGameOver || state.isWaveComplete || state.isBuyMenuOpen) return;
 
-  const asset = weapon.getCurrentAsset();
-  if (asset.behavior.isSniper) {
+  if (weapon.hasScope()) {
     startZoom();
     return;
   }
@@ -938,7 +936,7 @@ function stopSecondaryAction() {
 }
 
 function endSecondaryAction() {
-  if (weapon.getCurrentAsset().behavior.isSniper) stopZoom();
+  if (weapon.hasScope()) stopZoom();
 }
 
 function switchWeapon(slotNumber) {
@@ -1004,9 +1002,9 @@ function shoot() {
 
   const pelletCount = Math.max(1, shot.pellets ?? 1);
 
-  // Sniper bullet camera is scoped-only. Unscoped sniper shots stay hitscan.
-  // Scoped shots use a delayed projectile/cinematic camera when there is
-  // enough travel distance. The hit is resolved only when the bullet arrives.
+  // Only scoped sniper shots can use the bullet camera. Non-sniper scoped
+  // weapons and unscoped sniper shots stay on the normal hitscan path.
+  // The cinematic hit is resolved only when the bullet arrives.
   if (shot.isSniper && isZooming && pelletCount === 1) {
     const direction = getShotDirection(shot.spread);
     const bulletConfig = weapon.getCurrentAsset().bulletCamera ?? {};
