@@ -22,6 +22,6 @@ idle: "ta_rifle_run_trans_idle",
 shoot: "fire",
 reload: "reload"
 },
-model: "./assets/minigun.glb",
-fireSound: "./assets/minigun.ogg"
+model: "./assets/rifle.glb",
+fireSound: "./assets/rifle.ogg"
 };

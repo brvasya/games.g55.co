@@ -23,6 +23,6 @@ idle: "idling",
 shoot: "shoot1",
 reload: "reload"
 },
-model: "./assets/rifle.glb",
-fireSound: "./assets/rifle.ogg"
+model: "./assets/smg.glb",
+fireSound: "./assets/smg.ogg"
 };
