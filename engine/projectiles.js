@@ -153,6 +153,8 @@ export function createProjectiles({ THREE, scene, colliders = [], getEnemyHit, o
     const projectile = {
       settings,
       damage: Number.isFinite(shot.damage) ? Math.max(0, shot.damage) : 0,
+      selfDamage: Number.isFinite(shot.selfDamage) ? Math.max(0, shot.selfDamage)
+        : Number.isFinite(shot.damage) ? Math.max(0, shot.damage) : 0,
       position: start,
       velocity: forward.clone().multiplyScalar(settings.speed),
       age: 0,
@@ -211,6 +213,7 @@ export function createProjectiles({ THREE, scene, colliders = [], getEnemyHit, o
     if (onExplode) onExplode({
       position, normal, hit,
       damage: projectile.damage,
+      selfDamage: projectile.selfDamage,
       radius: projectile.settings.radius,
       projectile: projectile.settings.type,
       direction: projectile.velocity.clone().normalize()

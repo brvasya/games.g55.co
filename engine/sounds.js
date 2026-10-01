@@ -78,6 +78,29 @@ export function createSounds() {
     playClick(t + 0.58, 1.0, 1200, 0.1);
   }
 
+  // Brief ascending confirmation, generated locally with no new audio asset.
+  function playUpgrade(level = 1) {
+    if (!ctx) return;
+    resume();
+    const start = now();
+    const notes = level >= 3 ? [523.25, 659.25, 783.99, 1046.5] : [523.25, 659.25, 783.99];
+    notes.forEach((frequency, index) => {
+      const t = start + index * 0.065;
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(frequency, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.12, t + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      oscillator.connect(gain);
+      gain.connect(masterGain);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      oscillator.start(t);
+      oscillator.stop(t + 0.19);
+    });
+  }
+
   function playEmpty() {
     if (!ctx) return;
     resume();
@@ -213,6 +236,7 @@ export function createSounds() {
     playShoot,
     playExplosion,
     playReload,
+    playUpgrade,
     playEmpty,
     playEnemyHit,
     playEnemyDie,

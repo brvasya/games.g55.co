@@ -121,7 +121,8 @@ const dom = {
   mainMenuButton: document.getElementById("mainMenuButton"),
   fullscreenButton: document.getElementById("fullscreenButton"),
   uiStatus: document.getElementById("uiStatus"),
-  moreGamesButton: null
+  moreGamesButton: null,
+  waveShopButton: null
 };
 
 const clock = new THREE.Clock();
@@ -491,6 +492,11 @@ function setupInput() {
       return;
     }
     if (!state.isPlaying) {
+      if (e.code === "KeyB" && state.isWaveComplete && !mainMenuNeedsReset) {
+        e.preventDefault();
+        if (!e.repeat) openBuyMenu();
+        return;
+      }
       trapDialogFocus(dom.overlay, e);
       return;
     }
@@ -584,8 +590,26 @@ function setupOverlayButtons() {
   dom.moreGamesButton.href = `https://g55.co/?utm_source=moreGamesButton&utm_medium=${encodeURIComponent(document.title)}`;
   dom.moreGamesButton.target = "_blank";
   dom.moreGamesButton.rel = "noopener";
+
+  dom.waveShopButton = document.createElement("button");
+  dom.waveShopButton.id = "waveShopButton";
+  dom.waveShopButton.type = "button";
+  dom.waveShopButton.className = "cs-button cs-wave-shop";
+  dom.waveShopButton.textContent = "Weapon Shop";
+  setWaveShopVisible(false);
+  // Keep the existing primary action + More Games pair together.
+  dom.moreGamesButton.insertAdjacentElement("afterend", dom.waveShopButton);
+  dom.waveShopButton.addEventListener("click", () => { sounds.resume(); openBuyMenu(); });
 }
 
+
+function setWaveShopVisible(visible) {
+  if (!dom.waveShopButton) return;
+  dom.waveShopButton.hidden = !visible;
+  // Hide synchronously while the extra stylesheet is still loading, so the
+  // wave-only action cannot flash into the initial main-menu/preloader layout.
+  dom.waveShopButton.style.display = visible ? "" : "none";
+}
 
 function isTouchPortrait() {
   return touchControls.enabled && touchControls.isPortrait();
@@ -617,6 +641,7 @@ function showOverlay(title, text, action) {
   dom.startButton.textContent = action;
   dom.startButton.disabled = false;
   dom.mainMenuButton.hidden = false;
+  setWaveShopVisible(state.isWaveComplete && !state.isGameOver);
   focusMenu(dom.overlay);
 }
 
@@ -641,11 +666,12 @@ function returnToMainMenu() {
   dom.startButton.textContent = "Start Game";
   dom.mainMenuButton.hidden = true;
   mainMenuNeedsReset = true;
+  setWaveShopVisible(false);
   focusMenu(dom.overlay);
 }
 
 async function startGame() {
-  if (!bootReady || startPending) return;
+  if (!bootReady || startPending || state.isBuyMenuOpen) return;
   startPending = true;
   dom.startButton.disabled = true;
   sounds.resume();
@@ -685,7 +711,7 @@ function pauseGame() {
 }
 
 function toggleBuyMenu() {
-  if (sniperBulletCam.active || state.isGameOver || state.isWaveComplete) return;
+  if (sniperBulletCam.active || state.isGameOver || mainMenuNeedsReset) return;
 
   if (state.isBuyMenuOpen) {
     closeBuyMenu(true);
@@ -695,14 +721,17 @@ function toggleBuyMenu() {
 }
 
 function openBuyMenu() {
-  if (!state.isPlaying || state.isGameOver || state.isWaveComplete) return;
+  if (state.isBuyMenuOpen || state.isGameOver || mainMenuNeedsReset ||
+      (!state.isPlaying && !state.isWaveComplete)) return;
 
   cancelSniperBulletCamera();
   stopSecondaryAction();
   state.isPlaying = false;
   state.isBuyMenuOpen = true;
+  dom.overlay.style.display = "none";
 
   player.clearMovement();
+  touchControls.reset();
 
   if (document.pointerLockElement === document.body) document.exitPointerLock();
 
@@ -718,7 +747,12 @@ function closeBuyMenu(resumeGame = false) {
   state.isBuyMenuOpen = false;
   hud.hideBuyMenu();
 
-  if (!resumeGame || state.isGameOver || state.isWaveComplete) return;
+  if (state.isWaveComplete && !state.isGameOver) {
+    dom.overlay.style.display = "grid";
+    focusMenu(dom.overlay);
+    return;
+  }
+  if (!resumeGame || state.isGameOver) return;
 
   player.clearMovement();
   clearMenuSelection();
@@ -732,15 +766,26 @@ function updateBuyMenu() {
   hud.updateBuyMenu({
     score: state.score,
     weapons: weapon.getShopState(),
-    isReloading: weapon.getHudState().isReloading
+    isReloading: weapon.getHudState().isReloading,
+    betweenWaves: state.isWaveComplete
   });
 }
 
 function handleBuyMenuSlot(slotNumber, type = "weapon") {
-  if (!weapon.getShopState) return;
+  if (!state.isBuyMenuOpen || state.isGameOver || !weapon.getShopState) return;
 
   const slot = weapon.getShopState().find(item => item.id === slotNumber);
   if (!slot) return;
+
+  if (type === "upgrade") {
+    const result = weapon.upgradeSlot(slotNumber, state.score);
+    if (!result.ok) { updateBuyMenu(); return; }
+    state.score -= result.price;
+    sounds.playUpgrade(result.slot.upgradeLevel);
+    updateHud();
+    hud.showUpgrade(result.slot);
+    return;
+  }
 
   if (type === "ammo") {
     if (!slot.owned || slot.isMelee) return;
@@ -874,6 +919,7 @@ function continueWave() {
   if (!enemies) return;
 
   state.isWaveComplete = false;
+  setWaveShopVisible(false);
   state.wave += 1;
 
   startWave();
@@ -1103,7 +1149,7 @@ function getPlayerExplosionDamage(position, damage, radius) {
   return distance < radius ? Math.max(1, Math.round(damage * (1 - distance / radius))) : 0;
 }
 
-function handleProjectileExplosion({ position, hit, damage, radius, direction }) {
+function handleProjectileExplosion({ position, hit, damage, selfDamage = damage, radius, direction }) {
   if (!enemies || !state.isPlaying || state.isGameOver || state.isWaveComplete) return;
 
   const distanceToPlayer = position.distanceTo(camera.position);
@@ -1116,7 +1162,7 @@ function handleProjectileExplosion({ position, hit, damage, radius, direction })
     cameraShake.impulseRotZ += (Math.random() - 0.5) * 0.025 * shake;
   }
 
-  const playerDamage = getPlayerExplosionDamage(position, damage, radius);
+  const playerDamage = getPlayerExplosionDamage(position, selfDamage, radius);
   const targets = enemies.getExplosionHits(position, radius, projectiles.hasLineOfSight);
   const directEnemy = hit?.type === "enemy" ? hit.enemy : null;
   // A direct hit always takes full damage, including explosionRadius: 0.
@@ -1828,6 +1874,7 @@ async function resetGame() {
   state.isWaveComplete = false;
   state.isBuyMenuOpen = false;
   hud.hideBuyMenu();
+  setWaveShopVisible(false);
 
   cameraShake.trauma = 0;
   cameraShake.posAmp = 0.08;

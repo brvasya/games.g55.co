@@ -2,6 +2,14 @@ import { focusControl, focusMenu } from "./ui.js";
 import { isTouchDevice as detectTouch } from "./touchControls.js";
 
 export function createHud() {
+  // Scoped shop additions; existing site styles and asset definitions stay intact.
+  if (!document.getElementById("weaponUpgradeStyles")) {
+    const link = document.createElement("link");
+    link.id = "weaponUpgradeStyles";
+    link.rel = "stylesheet";
+    link.href = new URL("./weaponUpgrades.css", import.meta.url).href;
+    document.head.appendChild(link);
+  }
   const hud = document.getElementById("hud");
   const stats = document.getElementById("stats");
   const crosshair = document.getElementById("crosshair");
@@ -16,6 +24,10 @@ export function createHud() {
     weaponSlot: document.getElementById("weaponSlot"),
     weaponName: document.getElementById("weaponName")
   };
+
+  const weaponLevel = document.createElement("span");
+  weaponLevel.className = "cs-upgrade-level cs-hud-weapon-level";
+  weaponLevel.hidden = true;
 
   let buyCallback = null;
   let buyCloseCallback = null;
@@ -33,13 +45,14 @@ export function createHud() {
     <div class="cs-buy-panel" role="dialog" aria-modal="true" aria-labelledby="buyMenuTitle">
       <div class="cs-buy-head">
         <div>
-          <div id="buyMenuTitle" class="cs-buy-title">Buy Weapons</div>
+          <div id="buyMenuTitle" class="cs-buy-title">Weapons &amp; Upgrades</div>
           <div class="cs-buy-subtitle">${isTouchDevice ? "Tap × to close" : "1–6 select · Tab navigate · B / Esc close"}</div>
         </div>
         <button id="buyMenuClose" class="cs-buy-close" type="button" aria-label="Close weapon shop">×</button>
       </div>
       <div class="cs-buy-score">$<span id="buyMenuScore">0</span></div>
       <div id="buyMenuGrid" class="cs-buy-grid"></div>
+      <div id="buyMenuAnnouncement" class="cs-upgrade-announcement" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
   `;
   document.body.appendChild(buyMenu);
@@ -72,10 +85,16 @@ export function createHud() {
   buyMenuClose.addEventListener("click", requestBuyMenuClose);
 
   buyMenuGrid.addEventListener("click", event => {
+    const upgradeButton = event.target.closest("[data-buy-upgrade]");
+    if (upgradeButton) {
+      event.stopPropagation();
+      if (!upgradeButton.disabled && buyCallback) buyCallback(Number(upgradeButton.dataset.buyUpgrade), "upgrade");
+      return;
+    }
     const ammoButton = event.target.closest("[data-buy-ammo]");
     if (ammoButton && buyCallback) {
       event.stopPropagation();
-      buyCallback(Number(ammoButton.dataset.buyAmmo), "ammo");
+      if (!ammoButton.disabled) buyCallback(Number(ammoButton.dataset.buyAmmo), "ammo");
       return;
     }
 
@@ -153,6 +172,10 @@ export function createHud() {
     refs.enemiesLeft.textContent = waveTargetScore ? `${Math.min(waveScore, waveTargetScore)} / ${waveTargetScore}` : "0 / 0";
     refs.weaponSlot.textContent = state.weaponSlot ?? 1;
     refs.weaponName.textContent = state.weaponName ?? "WEAPON";
+    const level = state.weaponUpgradeLevel ?? 0;
+    weaponLevel.hidden = level === 0;
+    weaponLevel.textContent = level > 0 ? `LV ${level}${level === 3 ? " · MAX" : ""}` : "";
+    refs.weaponName.appendChild(weaponLevel);
 
     refs.health.closest(".cs-bottom-left").classList.toggle("danger", state.health <= 30);
     refs.ammo.closest(".cs-bottom-right").classList.toggle("danger", state.ammo <= 5);
@@ -162,19 +185,27 @@ export function createHud() {
     return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
   }
 
-  function updateBuyMenu({ score, weapons, isReloading = false }) {
+  function formatStat(value) {
+    return Number.isFinite(value) ? String(Number(value.toFixed(2))) : "—";
+  }
+
+  function updateBuyMenu({ score, weapons, isReloading = false, betweenWaves = false }) {
     const focused = document.activeElement;
     const focusSlot = focused?.dataset?.buySelect;
     const focusAmmo = focused?.dataset?.buyAmmo;
+    const focusUpgrade = focused?.dataset?.buyUpgrade;
+    const focusPurchase = focused?.dataset?.buyPurchase;
     buyMenuScore.textContent = score;
     buyMenu.querySelector(".cs-buy-subtitle").textContent = isReloading
-      ? "Reloading… Weapon selection will be ready shortly."
+      ? "Active reload paused. Resume play to finish it."
+      : betweenWaves ? "Prepare for the next wave · Close to return"
       : isTouchDevice ? "Tap × to close" : "1–6 select · Tab navigate · B / Esc close";
 
     buyMenuGrid.innerHTML = weapons.map(weapon => {
       const safeName = escapeHtml(weapon.name);
-      const selectionLabel = weapon.active ? `${safeName}, equipped. Return to game` : weapon.owned ? `Equip ${safeName}` : `Buy ${safeName} for $${weapon.price}`;
+      const selectionLabel = weapon.active ? `${safeName}, equipped. Close shop` : weapon.owned ? `Equip ${safeName}` : `Buy ${safeName} for $${weapon.price}`;
       const canBuy = !weapon.owned && score >= weapon.price;
+      const canSelect = (weapon.owned || canBuy) && (!isReloading || weapon.active);
       const priceClass = canBuy ? "affordable" : "expensive";
       const ammoPrice = weapon.ammoPrice;
       const canBuyAmmo = weapon.owned && !weapon.isMelee && score >= ammoPrice;
@@ -185,33 +216,64 @@ export function createHud() {
           ? '<span class="cs-buy-owned-text">EQUIP</span>'
           : `<span class="cs-buy-price ${priceClass}">${canBuy ? "BUY" : `NEED $${weapon.price - score}`}</span>`;
       const stateClass = weapon.active ? "active" : weapon.owned ? "owned" : canBuy ? "available" : "locked";
-      const bottomAction = weapon.owned && !weapon.isMelee
-        ? `<button class="cs-buy-action ${ammoPriceClass}" data-buy-ammo="${weapon.id}" aria-label="Buy ${weapon.magazineSize} rounds for ${safeName}, $${ammoPrice}" type="button" ${canBuyAmmo ? "" : "disabled"}>
-              <span class="cs-buy-price ${ammoPriceClass}">+ AMMO $${ammoPrice}</span>
-           </button>`
-        : !weapon.owned
-          ? `<button class="cs-buy-action cs-buy-purchase ${priceClass}" type="button" ${canBuy ? "" : "disabled"}>
-                <span class="cs-buy-price ${priceClass}">$${weapon.price}</span>
-             </button>`
-          : '<span class="cs-buy-action-spacer" aria-hidden="true"></span>';
+      const level = weapon.upgradeLevel ?? 0;
+      const maxed = level >= weapon.maxUpgradeLevel;
+      const next = weapon.nextUpgrade;
+      const upgradePrice = weapon.upgradePrice;
+      const canUpgrade = weapon.owned && next && !weapon.upgradeBlocked && score >= upgradePrice;
+      const upgradePriceClass = canUpgrade ? "affordable" : "expensive";
+      const upgradeLabel = maxed ? "MAXED" : weapon.upgradeBlocked ? "RELOAD PAUSED" : `UPGRADE → LV ${level + 1}`;
+      const upgradeCost = maxed ? "LV 3" : score < upgradePrice ? `NEED $${upgradePrice - score}` : `$${upgradePrice}`;
+      const levelBadge = weapon.owned && level > 0
+        ? `<span class="cs-upgrade-level">LV ${level}${maxed ? " · MAX" : ""}</span>` : "";
+      const bonusDescription = next
+        ? `LV ${next.level}, bonuses versus base: +${Math.round((next.damageMultiplier - 1) * 100)}% damage, +${Math.round((next.fireRateMultiplier - 1) * 100)}% fire rate${weapon.isMelee ? "" : `, −${Math.round((1 - next.reloadDurationMultiplier) * 100)}% reload time`}.`
+        : "All three upgrades purchased.";
+      const preview = !weapon.owned
+        ? '<span class="cs-upgrade-preview"><span>3 upgrade levels</span><small>Available after purchase</small></span>'
+        : `<span class="cs-upgrade-preview" title="${escapeHtml(bonusDescription)}"><span>${maxed ? "Fully upgraded" : `Next: ${formatStat(weapon.damage)} → <b>${formatStat(next.damage)} DMG</b>`}</span><small>${maxed ? "Maximum weapon power" : weapon.isMelee ? "Faster attacks" : "Faster fire + reload"}</small></span>`;
+      const upgradeAction = `<button class="cs-buy-action cs-buy-upgrade ${upgradePriceClass}${maxed ? " maxed" : ""}" data-buy-upgrade="${weapon.id}" aria-label="${maxed ? `${safeName}, maximum upgrade level` : weapon.upgradeBlocked ? `Resume play to finish reloading ${safeName} before upgrading` : `Upgrade ${safeName} to level ${level + 1} for $${upgradePrice}. ${escapeHtml(bonusDescription)}`}" type="button" ${canUpgrade ? "" : "disabled"}>
+          <span>${upgradeLabel}</span><span class="cs-buy-price ${upgradePriceClass}">${upgradeCost}</span>
+        </button>`;
+      const ammoAction = `<button class="cs-buy-action ${ammoPriceClass}" data-buy-ammo="${weapon.id}" aria-label="Buy ${weapon.magazineSize} rounds for ${safeName}, $${ammoPrice}" type="button" ${canBuyAmmo ? "" : "disabled"}>
+          <span>+ AMMO</span><span class="cs-buy-price ${ammoPriceClass}">$${ammoPrice}</span>
+        </button>`;
+      const bottomAction = weapon.owned
+        ? upgradeAction + (weapon.isMelee ? "" : ammoAction)
+        : `<button class="cs-buy-action cs-buy-purchase ${priceClass}" data-buy-purchase="${weapon.id}" type="button" aria-label="Buy ${safeName} for $${weapon.price}" ${canSelect ? "" : "disabled"}>
+            <span>BUY WEAPON</span><span class="cs-buy-price ${priceClass}">$${weapon.price}</span>
+           </button>`;
 
       return `
         <div class="cs-buy-card ${stateClass}" data-buy-slot="${weapon.id}">
-          <button type="button" class="cs-buy-select" data-buy-select="${weapon.id}" aria-label="${selectionLabel}" ${(!weapon.owned && !canBuy) || (isReloading && !weapon.active) ? "disabled" : ""}></button>
+          <button type="button" class="cs-buy-select" data-buy-select="${weapon.id}" aria-label="${selectionLabel}" ${canSelect ? "" : "disabled"}></button>
           <span class="cs-buy-key">${weapon.id}</span>
-          <span class="cs-buy-name">${safeName}</span>
-          <span class="cs-buy-stats">${weapon.damage} DMG · ${weapon.magazineSize} MAG</span>
+          <span class="cs-buy-name">${safeName}${levelBadge}</span>
+          <span class="cs-buy-stats">${formatStat(weapon.damage)} DMG${weapon.isMelee ? " · MELEE" : ` · ${weapon.magazineSize} MAG`}</span>
           <span class="cs-buy-status">${status}</span>
-          ${bottomAction}
+          ${preview}
+          <div class="cs-buy-actions${!weapon.owned || weapon.isMelee ? " single" : ""}">${bottomAction}</div>
         </div>
       `;
     }).join("");
-    if (buyMenu.classList.contains("open") && (focusSlot || focusAmmo)) {
-      const target = focusAmmo
-        ? buyMenuGrid.querySelector(`[data-buy-ammo="${focusAmmo}"]:not(:disabled)`) || buyMenuGrid.querySelector(`[data-buy-select="${focusAmmo}"]:not(:disabled)`)
-        : buyMenuGrid.querySelector(`[data-buy-select="${focusSlot}"]:not(:disabled)`);
+    if (buyMenu.classList.contains("open") && (focusSlot || focusAmmo || focusUpgrade || focusPurchase)) {
+      const id = focusUpgrade || focusAmmo || focusPurchase || focusSlot;
+      const kind = focusUpgrade ? "upgrade" : focusAmmo ? "ammo" : focusPurchase ? "purchase" : "select";
+      const target = buyMenuGrid.querySelector(`[data-buy-${kind}="${id}"]:not(:disabled)`)
+        || buyMenuGrid.querySelector(`[data-buy-select="${id}"]:not(:disabled)`);
       focusControl(target || buyMenuClose);
+      target?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
+  }
+
+  function showUpgrade(weapon) {
+    const card = buyMenuGrid.querySelector(`[data-buy-slot="${weapon.id}"]`);
+    if (card) {
+      card.classList.remove("upgrade-flash");
+      void card.offsetWidth;
+      card.classList.add("upgrade-flash");
+    }
+    buyMenu.querySelector("#buyMenuAnnouncement").textContent = `${weapon.name} upgraded to LV ${weapon.upgradeLevel}${weapon.upgradeLevel === weapon.maxUpgradeLevel ? ", maximum level" : ""}.`;
   }
 
   function showBuyMenu() {
@@ -242,6 +304,7 @@ export function createHud() {
     setBuyCloseCallback,
     updateBuyMenu,
     showBuyMenu,
+    showUpgrade,
     hideBuyMenu,
     isBuyMenuOpen
   };

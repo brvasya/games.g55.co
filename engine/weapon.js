@@ -1,5 +1,6 @@
 import { createGLTFLoader } from "./gltfLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { WEAPON_UPGRADE_TIERS, MAX_WEAPON_UPGRADE_LEVEL, getWeaponUpgradeStats, getWeaponUpgradePrice } from "./weaponUpgrades.js";
 
 export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamera, playerVelocity, weaponSlots, onStateChange }) {
   const HANDS_MODEL_URL = "./assets/hands.glb";
@@ -175,6 +176,8 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       price,
       owned,
       defaultOwned: owned,
+      upgradeLevel: 0,
+      baseStats: Object.freeze({ damage: behavior.damage, fireCooldownMs: behavior.fireCooldownMs }),
       magazineSize: behavior.magazineSize,
       ammo: behavior.magazineSize,
       reserveAmmo,
@@ -390,6 +393,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     const index = slotNumber - 1;
     const slot = slots[index];
 
+    if (!slot) return { ok: false, reason: "invalid" };
     if (slot.owned) return { ok: false, reason: "owned", slot: getSlotShopState(slot) };
 
     slot.owned = true;
@@ -416,8 +420,33 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     };
   }
 
+  function applyUpgradeLevel(slot, level) {
+    const stats = getWeaponUpgradeStats(slot.baseStats, level);
+    slot.upgradeLevel = level;
+    slot.damage = stats.damage;
+    slot.fireCooldownMs = stats.fireCooldownMs;
+  }
+
+  function upgradeSlot(slotNumber, availableMoney) {
+    const slot = slots.find(item => item.id === slotNumber);
+    if (!slot) return { ok: false, reason: "invalid" };
+    if (!slot.owned) return { ok: false, reason: "unowned" };
+    const price = getWeaponUpgradePrice(slot.price, slot.upgradeLevel);
+    if (price === null) return { ok: false, reason: "max" };
+    // The active reload is paused in the shop. Never alter its scheduled
+    // ammo-insertion times midway through a normal or segmented reload.
+    if (slot === currentSlot() && isReloading) return { ok: false, reason: "reloading" };
+    if (!Number.isFinite(availableMoney) || availableMoney < price) {
+      return { ok: false, reason: "funds" };
+    }
+    applyUpgradeLevel(slot, slot.upgradeLevel + 1);
+    // Buying an upgrade never equips a different weapon or refills ammo.
+    return { ok: true, price, slot: getSlotShopState(slot) };
+  }
+
   function resetSlots() {
     slots.forEach(slot => {
+      applyUpgradeLevel(slot, 0);
       slot.owned = slot.defaultOwned;
       slot.ammo = slot.magazineSize;
       slot.reserveAmmo = slot.defaultReserveAmmo;
@@ -473,6 +502,9 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       spread: slot.spread,
       pellets: slot.pellets,
       projectile: slot.projectile,
+      // Capture both values at firing time; upgrades/weapon switches must not
+      // change a projectile already in flight. Self-damage stays at base power.
+      selfDamage: slot.baseStats.damage,
       isSniper: slot.isSniper,
       isMelee: false,
       range: slot.range,
@@ -650,6 +682,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     return {
       weaponSlot: slot.id,
       weaponName: slot.name,
+      weaponUpgradeLevel: slot.upgradeLevel,
       ammo: slot.ammo,
       reserveAmmo: slot.reserveAmmo,
       isReloading,
@@ -664,6 +697,14 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       id: slot.id,
       name: slot.name,
       price: slot.price,
+      upgradeLevel: slot.upgradeLevel,
+      maxUpgradeLevel: MAX_WEAPON_UPGRADE_LEVEL,
+      upgradePrice: getWeaponUpgradePrice(slot.price, slot.upgradeLevel),
+      upgradeBlocked: slot === currentSlot() && isReloading,
+      nextUpgrade: slot.upgradeLevel < MAX_WEAPON_UPGRADE_LEVEL ? {
+        level: slot.upgradeLevel + 1,
+        ...getWeaponUpgradeStats(slot.baseStats, slot.upgradeLevel + 1)
+      } : null,
       ammoPrice: getAmmoPrice(slot),
       owned: slot.owned,
       active: slot.id === currentSlot().id,
@@ -964,7 +1005,10 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       ? (behavior.reloadSpeed ?? 1)
       : 1;
 
-    return Math.max(Number(speed) || 1, 0.01);
+    const baseSpeed = Math.max(Number(speed) || 1, 0.01);
+    return name === "reload"
+      ? baseSpeed / WEAPON_UPGRADE_TIERS[currentSlot().upgradeLevel].reloadDurationMultiplier
+      : baseSpeed;
   }
 
   function getEffectiveActionDuration(name) {
@@ -1445,6 +1489,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     switchSlot,
     buySlot,
     buyAmmo,
+    upgradeSlot,
     resetSlots,
     addReserveAmmo,
     addReserveAmmoToSlot,
