@@ -14,8 +14,9 @@ import { createBulletHoles } from "./bulletHoles.js";
 const KILL_REWARD = 100;
 const HEADSHOT_REWARD = 100;
 const MULTIKILL_WINDOW_MS = 2000;
-const MULTIKILL_CASH_MULTIPLIER = 1.5;
-const MULTIKILL_MAX_CASH_MULTIPLIER = 2;
+const DOUBLE_KILL_CASH_MULTIPLIER = 2;
+const TRIPLE_KILL_CASH_MULTIPLIER = 3;
+const MULTIKILL_CASH_MULTIPLIER = 4;
 
 function createLoadingButtonController() {
   const button = document.getElementById("startButton");
@@ -866,15 +867,16 @@ function resetKillCombo() {
 }
 
 function getKillComboMultiplier(comboCount) {
-  if (comboCount >= 3) return MULTIKILL_MAX_CASH_MULTIPLIER;
-  if (comboCount === 2) return MULTIKILL_CASH_MULTIPLIER;
+  if (comboCount >= 4) return MULTIKILL_CASH_MULTIPLIER;
+  if (comboCount === 3) return TRIPLE_KILL_CASH_MULTIPLIER;
+  if (comboCount === 2) return DOUBLE_KILL_CASH_MULTIPLIER;
   return 1;
 }
 
 function getKillComboMessage(comboCount) {
-  if (comboCount === 2) return "DOUBLE KILL x1.5";
-  if (comboCount === 3) return "TRIPLE KILL x2";
-  return "MULTIKILL x2";
+  if (comboCount === 2) return "DOUBLE KILL x2";
+  if (comboCount === 3) return "TRIPLE KILL x3";
+  return "MULTIKILL x4";
 }
 
 function shouldInstantKillHeadshot(hit) {
