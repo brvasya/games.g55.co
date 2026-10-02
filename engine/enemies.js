@@ -9,7 +9,12 @@ export function createEnemies({
   state,
   floorObjects = [],
   navigation = null,
-  enemyTypes
+  enemyTypes,
+  playAudio = (audio, volume = 1.0) => {
+    audio.volume = volume;
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  }
 }) {
   const enemies = [];
   const toPlayer = new THREE.Vector3();
@@ -1562,9 +1567,7 @@ export function createEnemies({
     const cached = audioCache.get(src);
     const audio = cached?.audio ? cached.audio.cloneNode(true) : new Audio(src);
 
-    audio.volume = volume;
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
+    playAudio(audio, volume);
   }
 
   function reset() {

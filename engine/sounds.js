@@ -2,6 +2,9 @@ export function createSounds() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const ctx = AudioContextClass ? new AudioContextClass() : null;
   const masterGain = ctx ? ctx.createGain() : null;
+  const mediaAudioSources = new WeakMap();
+  const fallbackAudioVolumes = new Map();
+  let muted = false;
   const ENEMY_HIT_SOUND = "./assets/impact.ogg";
   const JUMP_SOUND = "./assets/jump.ogg";
   const DEATH_SOUND = "./assets/death.ogg";
@@ -18,6 +21,57 @@ export function createSounds() {
 
   function resume() {
     if (ctx && ctx.state === "suspended") ctx.resume();
+  }
+
+  function setMuted(value) {
+    muted = Boolean(value);
+    if (masterGain) {
+      const time = ctx.currentTime;
+      masterGain.gain.cancelScheduledValues(time);
+      masterGain.gain.setTargetAtTime(muted ? 0 : 1, time, 0.012);
+    }
+    for (const [audio, volume] of fallbackAudioVolumes) {
+      if (audio.ended) fallbackAudioVolumes.delete(audio);
+      else audio.volume = muted ? 0 : volume;
+    }
+    return muted;
+  }
+
+  function toggleMute() {
+    return setMuted(!muted);
+  }
+
+  function isMuted() {
+    return muted;
+  }
+
+  function playAudio(audio, volume = 1.0) {
+    if (!audio) return;
+    resume();
+
+    let source = mediaAudioSources.get(audio);
+    if (!source && ctx && masterGain) {
+      try {
+        source = ctx.createMediaElementSource(audio);
+        source.connect(masterGain);
+        mediaAudioSources.set(audio, source);
+      } catch {
+        source = null;
+      }
+    }
+
+    audio.volume = source ? volume : (muted ? 0 : volume);
+    if (!source) fallbackAudioVolumes.set(audio, volume);
+    audio.addEventListener("ended", () => {
+      mediaAudioSources.get(audio)?.disconnect();
+      mediaAudioSources.delete(audio);
+      fallbackAudioVolumes.delete(audio);
+    }, { once: true });
+
+    audio.currentTime = 0;
+    audio.play().catch(() => {
+      fallbackAudioVolumes.delete(audio);
+    });
   }
 
   function now() {
@@ -234,9 +288,7 @@ export function createSounds() {
     if (!src || src.includes("YOUR_")) return;
 
     const audio = new Audio(src);
-    audio.volume = volume;
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
+    playAudio(audio, volume);
   }
 
   function createNoiseBuffer(duration) {
@@ -254,6 +306,10 @@ export function createSounds() {
 
   return {
     resume,
+    setMuted,
+    toggleMute,
+    isMuted,
+    playAudio,
     playShoot,
     playExplosion,
     playReload,

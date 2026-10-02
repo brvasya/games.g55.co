@@ -361,7 +361,8 @@ function createEnemySystemIfNeeded() {
     colliders: world.colliders,
     navigation: world.navigation,
     enemyTypes: GAME_ASSETS.enemies.types,
-    defaultEnemyType: GAME_ASSETS.enemies.defaultType
+    defaultEnemyType: GAME_ASSETS.enemies.defaultType,
+    playAudio: sounds.playAudio
   });
 
   return enemies;
@@ -484,6 +485,11 @@ function setupInput() {
 
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.code === "KeyM") {
+      e.preventDefault();
+      if (!e.repeat) showNotice(sounds.toggleMute() ? "Sound muted" : "Sound on");
+      return;
+    }
     if (e.code === "KeyF") {
       e.preventDefault();
       if (!e.repeat) toggleFullscreen();
