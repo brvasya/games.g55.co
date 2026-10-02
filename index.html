@@ -251,21 +251,19 @@ html.touch-device .controls-touch { display: inline; }
 }
 #startButton[data-loading="true"]::after { content: "" !important; }
 #overlay.main-menu #panel #moreGamesButton {
-  border-color: rgba(255,255,255,.13);
-  background: rgba(5,9,13,.44);
-  color: rgba(255,255,255,.72);
-  box-shadow: none;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border-color: var(--ui-line-strong);
+  background: rgba(255,255,255,.045);
+  color: var(--ui-text);
+  box-shadow: 0 8px 22px rgba(0,0,0,.2);
 }
 #overlay.main-menu #panel #startButton:not(:disabled):hover {
   border-color: rgba(122,224,255,.82);
   background: linear-gradient(180deg, #32c7f7, #0799cb);
 }
 #overlay.main-menu #panel #moreGamesButton:hover {
-  color: #fff;
-  border-color: rgba(255,255,255,.24);
-  background: rgba(255,255,255,.075);
+  color: var(--ui-text);
+  border-color: rgba(255,255,255,.26);
+  background: rgba(255,255,255,.1);
 }
 .menu-secondary {
   display: flex;
