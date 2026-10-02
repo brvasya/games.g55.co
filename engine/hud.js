@@ -216,7 +216,7 @@ export function createHud() {
         ? '<span class="cs-buy-owned-text">ACTIVE</span>'
         : weapon.owned
           ? '<span class="cs-buy-owned-text">EQUIP</span>'
-          : `<span class="cs-buy-price ${priceClass}">${canBuy ? "BUY" : `NEED $${weapon.price - score}`}</span>`;
+          : `<span class="cs-buy-price ${priceClass}">BUY</span>`;
       const stateClass = weapon.active ? "active" : weapon.owned ? "owned" : canBuy ? "available" : "locked";
       const level = weapon.upgradeLevel ?? 0;
       const maxed = level >= (weapon.maxUpgradeLevel ?? 3);
@@ -227,7 +227,7 @@ export function createHud() {
       const upgradePriceClass = maxed ? "complete" : weapon.upgradeBlocked || !next
         ? "unavailable" : canUpgrade ? "affordable" : "expensive";
       const upgradeLabel = maxed ? "MAXED" : weapon.upgradeBlocked ? "RELOAD PAUSED" : !next ? "UNAVAILABLE" : `UPGRADE <span class="cs-upgrade-arrow" aria-hidden="true">→ </span>LV ${level + 1}`;
-      const upgradeCost = maxed ? `LV ${level}` : !next ? "—" : score < upgradePrice ? `NEED $${upgradePrice - score}` : `$${upgradePrice}`;
+      const upgradeCost = maxed ? `LV ${level}` : !next ? "—" : `$${upgradePrice}`;
       const levelBadge = weapon.owned && level > 0
         ? `<span class="cs-upgrade-level${maxed ? " complete" : ""}">LV ${level}${maxed ? " · MAX" : ""}</span>` : "";
       const bonusDescription = next
