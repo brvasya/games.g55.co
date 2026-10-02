@@ -124,9 +124,13 @@ export function createHud() {
   }
 
   function showHeadshot() {
-    headshotMessage.classList.remove("show");
+    clearHeadshot();
     void headshotMessage.offsetWidth;
     headshotMessage.classList.add("show");
+  }
+
+  function clearHeadshot() {
+    headshotMessage.classList.remove("show");
   }
 
   function showScope() {
@@ -296,6 +300,7 @@ export function createHud() {
     setCrosshairFire,
     setCrosshairVisible,
     showHeadshot,
+    clearHeadshot,
     showScope,
     hideScope,
     setScope,

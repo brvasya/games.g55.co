@@ -651,6 +651,7 @@ function returnToMainMenu() {
   state.isPlaying = false;
   state.isBuyMenuOpen = false;
   hud.hideBuyMenu();
+  hud.clearHeadshot();
   player.clearMovement();
   touchControls.reset();
   cancelSniperBulletCamera();
@@ -1863,6 +1864,7 @@ function endGame() {
 
 async function resetGame() {
   clearTimeout(gameOverOverlayTimer);
+  hud.clearHeadshot();
   player.clearMovement();
   state.health = 100;
   state.score = 0;
