@@ -593,7 +593,7 @@ p {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  width: 100%;
+  width: fit-content;
   margin: 0;
   padding: 8px 12px;
   border: 1px solid rgb(134 230 139 / .18);
