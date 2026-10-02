@@ -13,10 +13,53 @@ export function createSounds() {
   const DOUBLE_KILL_SOUND = "./assets/doublekill.ogg";
   const TRIPLE_KILL_SOUND = "./assets/triplekill.ogg";
   const MULTIKILL_SOUND = "./assets/multikill.ogg";
+  const audioCache = new Map();
 
   if (masterGain) {
     masterGain.gain.value = 1.0;
     masterGain.connect(ctx.destination);
+  }
+
+  function preloadAll() {
+    return Promise.all([
+      ENEMY_HIT_SOUND,
+      JUMP_SOUND,
+      DEATH_SOUND,
+      HIT_SOUND,
+      HEADSHOT_SOUND,
+      DOUBLE_KILL_SOUND,
+      TRIPLE_KILL_SOUND,
+      MULTIKILL_SOUND
+    ].map(preloadSound));
+  }
+
+  function preloadSound(src) {
+    if (!src) return Promise.resolve(null);
+
+    const cached = audioCache.get(src);
+    if (cached?.promise) return cached.promise;
+    if (cached?.audio || cached?.failed) return Promise.resolve(cached);
+
+    const audio = new Audio();
+    const entry = { audio, failed: false, promise: null };
+    audioCache.set(src, entry);
+
+    entry.promise = new Promise(resolve => {
+      const done = () => resolve(entry);
+      const fail = () => {
+        entry.failed = true;
+        resolve(entry);
+      };
+
+      audio.preload = "auto";
+      audio.src = src;
+      audio.volume = 1.0;
+      audio.addEventListener("canplaythrough", done, { once: true });
+      audio.addEventListener("error", fail, { once: true });
+      audio.load();
+    });
+
+    return entry.promise;
   }
 
   function resume() {
@@ -287,7 +330,8 @@ export function createSounds() {
   function playFromAsset(src, volume = 1.0) {
     if (!src || src.includes("YOUR_")) return;
 
-    const audio = new Audio(src);
+    const cached = audioCache.get(src);
+    const audio = cached?.audio && !cached.failed ? cached.audio.cloneNode(true) : new Audio(src);
     playAudio(audio, volume);
   }
 
@@ -306,6 +350,7 @@ export function createSounds() {
 
   return {
     resume,
+    preloadAll,
     setMuted,
     toggleMute,
     isMuted,
