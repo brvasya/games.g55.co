@@ -11,7 +11,7 @@ muzzleFlash: "muzzle_flash",
 shellEject: "",
 behavior: {
 magazineSize: 1,
-damage: 240,
+damage: 200,
 fireCooldownMs: 1000,
 reloadSpeed: 1,
 pellets: 1,
