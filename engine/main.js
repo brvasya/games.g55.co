@@ -776,7 +776,6 @@ function updateBuyMenu() {
   hud.updateBuyMenu({
     score: state.score,
     weapons: weapon.getShopState(),
-    isReloading: weapon.getHudState().isReloading,
     betweenWaves: state.isWaveComplete
   });
 }
@@ -813,8 +812,6 @@ function handleBuyMenuSlot(slotNumber, type = "weapon") {
     updateBuyMenu();
     return;
   }
-
-  if (weapon.getHudState().isReloading && !slot.active) return;
 
   if (slot.owned) {
     if (slot.active) { closeBuyMenu(true); return; }

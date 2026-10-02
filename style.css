@@ -708,10 +708,18 @@ p {
   min-height: 24px;
 }
 
+#buyMenu .cs-buy-title-group {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
 #buyMenu .cs-buy-name {
   position: static;
   display: block;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   width: auto;
   max-width: none;
@@ -799,36 +807,6 @@ p {
 #buyMenu .cs-buy-owned-text { color: var(--ui-accent-bright); }
 
 #buyMenu .active .cs-buy-owned-text { color: var(--ui-success); }
-
-#buyMenu .cs-upgrade-summary {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  min-height: 34px;
-  margin: 0;
-  padding: 0;
-}
-
-#buyMenu .cs-upgrade-preview {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  color: #d5dce0;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.3;
-  letter-spacing: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  opacity: 1;
-}
-
-#buyMenu .cs-upgrade-preview small { color: var(--ui-muted); font-size: 10px; line-height: 1.3; opacity: 1; }
 
 #buyMenu .cs-upgrade-level {
   flex: 0 0 auto;
@@ -950,8 +928,6 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   #buyMenu .cs-buy-key { flex-basis: 20px; width: 20px; height: 20px; }
   #buyMenu .cs-buy-stats { font-size: 9px; }
   #buyMenu .cs-buy-status { font-size: 10px; }
-  #buyMenu .cs-upgrade-summary { gap: 4px; }
-  #buyMenu .cs-upgrade-preview { font-size: 11px; }
   #buyMenu .cs-upgrade-level { font-size: 9px; padding: 3px; }
   #buyMenu .cs-buy-actions { gap: 4px; }
   #buyMenu .cs-buy-actions .cs-buy-action { font-size: 9px; }
@@ -967,9 +943,7 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   #buyMenu .cs-buy-card-meta { flex-wrap: wrap; align-content: flex-start; gap: 3px 6px; min-height: 28px; }
   #buyMenu .cs-buy-stats { flex-basis: 100%; }
   #buyMenu .cs-buy-status { text-align: left; }
-  #buyMenu .cs-upgrade-summary { position: relative; min-height: 30px; }
-  /* Use the empty right side of the status row for the level badge. */
-  #buyMenu .cs-upgrade-level { position: absolute; top: -21px; right: 0; padding: 2px 3px; }
+  #buyMenu .cs-upgrade-level { padding: 2px 3px; }
   #buyMenu .cs-buy-stats { font-size: 10px; }
   #buyMenu .cs-upgrade-arrow { display: none; }
   #buyMenu .cs-buy-actions .cs-buy-action { min-height: 44px; padding: 3px 2px; gap: 3px; line-height: 1.1; letter-spacing: 0; }
@@ -1000,9 +974,6 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   #buyMenu .cs-buy-key { flex-basis: 18px; width: 18px; height: 18px; font-size: 9px; }
   #buyMenu .cs-buy-card-meta { min-height: 14px; }
   #buyMenu .cs-buy-stats, #buyMenu .cs-buy-status { font-size: 9px; }
-  #buyMenu .cs-upgrade-summary { min-height: 26px; gap: 4px; }
-  #buyMenu .cs-upgrade-preview { font-size: 10px; gap: 2px; line-height: 1.2; }
-  #buyMenu .cs-upgrade-preview small { font-size: 9px; line-height: 1.2; }
   #buyMenu .cs-upgrade-level { font-size: 9px; padding: 2px 3px; }
   #buyMenu .cs-buy-actions { gap: 4px; }
   #buyMenu .cs-buy-actions .cs-buy-action { min-height: 42px; padding: 5px 2px; font-size: 9px; gap: 3px; letter-spacing: 0; }
@@ -1016,7 +987,6 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   #buyMenu .cs-buy-card-head { min-height: 16px; }
   #buyMenu .cs-buy-key { flex-basis: 16px; width: 16px; height: 16px; }
   #buyMenu .cs-buy-card-meta { min-height: 12px; }
-  #buyMenu .cs-upgrade-summary { min-height: 24px; }
 }
 
 @media (max-width: 360px) and (orientation: portrait) {
@@ -1026,9 +996,6 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   #buyMenu .cs-buy-grid { gap: 6px; }
   #buyMenu .cs-buy-card { padding: 7px; gap: 4px; }
   #buyMenu .cs-buy-name { font-size: 12px; }
-  #buyMenu .cs-upgrade-level { top: -19px; }
-  #buyMenu .cs-upgrade-preview { font-size: 10px; }
-  #buyMenu .cs-upgrade-preview small { font-size: 9px; }
 }
 
 /* Compact portrait: keep the balance in the header and all six cards visible. */
@@ -1045,7 +1012,6 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   #buyMenu .cs-buy-card-head { min-height: 27px; }
   #buyMenu .cs-buy-name { font-size: 11px; line-height: 1.2; }
   #buyMenu .cs-buy-card-meta { min-height: 26px; }
-  #buyMenu .cs-upgrade-summary { min-height: 26px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

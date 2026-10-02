@@ -378,7 +378,11 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     const index = slotNumber - 1;
     const slot = slots[index];
 
-    if (!slot || !slot.owned || index === currentSlotIndex || isReloading) return false;
+    if (!slot || !slot.owned || index === currentSlotIndex) return false;
+
+    // Switching weapons cancels an in-progress reload. Segmented reloads
+    // keep any shells already inserted because ammo is updated per shell.
+    if (isReloading) cancelReload();
 
     currentSlotIndex = index;
     lastShotTime = Number.NEGATIVE_INFINITY;
@@ -433,11 +437,14 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
     if (!slot.owned) return { ok: false, reason: "unowned" };
     const price = getWeaponUpgradePrice(slot.price, slot.upgradeLevel);
     if (price === null) return { ok: false, reason: "max" };
-    // The active reload is paused in the shop. Never alter its scheduled
-    // ammo-insertion times midway through a normal or segmented reload.
-    if (slot === currentSlot() && isReloading) return { ok: false, reason: "reloading" };
     if (!Number.isFinite(availableMoney) || availableMoney < price) {
       return { ok: false, reason: "funds" };
+    }
+    if (slot === currentSlot() && isReloading) {
+      // Stop the old reload schedule before applying a reload-speed upgrade.
+      // Any shells inserted by a segmented reload remain in the magazine.
+      cancelReload();
+      play("idle");
     }
     applyUpgradeLevel(slot, slot.upgradeLevel + 1);
     // Buying an upgrade never equips a different weapon or refills ammo.
@@ -700,7 +707,6 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       upgradeLevel: slot.upgradeLevel,
       maxUpgradeLevel: MAX_WEAPON_UPGRADE_LEVEL,
       upgradePrice: getWeaponUpgradePrice(slot.price, slot.upgradeLevel),
-      upgradeBlocked: slot === currentSlot() && isReloading,
       nextUpgrade: slot.upgradeLevel < MAX_WEAPON_UPGRADE_LEVEL ? {
         level: slot.upgradeLevel + 1,
         ...getWeaponUpgradeStats(slot.baseStats, slot.upgradeLevel + 1)
