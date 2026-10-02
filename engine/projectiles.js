@@ -1,3 +1,5 @@
+import { getProjectileUpgradeRadius } from "./weaponUpgrades.js";
+
 // World-space launcher projectiles. No external models, textures or physics library.
 // Asset behavior.projectile selects "grenade" or "rocket"; other weapons stay hitscan.
 export function getProjectileSettings(behavior = {}) {
@@ -144,6 +146,7 @@ export function createProjectiles({ THREE, scene, colliders = [], getEnemyHit, o
     const settings = getProjectileSettings({ ...behavior, projectile: shot.projectile });
     if (!settings || !aimOrigin || !direction || direction.lengthSq() < 1e-8) return false;
     if (![aimOrigin.x, aimOrigin.y, aimOrigin.z, direction.x, direction.y, direction.z].every(Number.isFinite)) return false;
+    settings.radius = getProjectileUpgradeRadius(settings.radius, shot.weaponUpgradeLevel ?? 0);
     const forward = direction.clone().normalize();
     const start = origin?.clone() || aimOrigin.clone().addScaledVector(forward, 0.2);
     if (![start.x, start.y, start.z].every(Number.isFinite)) start.copy(aimOrigin);

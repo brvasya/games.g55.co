@@ -509,6 +509,7 @@ export function createWeaponSystem({ THREE, weaponScene, worldScene, weaponCamer
       spread: slot.spread,
       pellets: slot.pellets,
       projectile: slot.projectile,
+      weaponUpgradeLevel: slot.upgradeLevel,
       // Capture both values at firing time; upgrades/weapon switches must not
       // change a projectile already in flight. Self-damage stays at base power.
       selfDamage: slot.baseStats.damage,
