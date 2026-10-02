@@ -77,6 +77,8 @@ const state = {
   enemyLimit: 0,
   isPlaying: false,
   isGameOver: false,
+  isGameComplete: false,
+  isFinalWave: false,
   isWaveComplete: false,
   isBuyMenuOpen: false
 };
@@ -186,7 +188,7 @@ const weapon = createWeaponSystem({
   onStateChange: () => updateHud()
 });
 const touchControls = createTouchControls({
-  isActive: () => state.isPlaying && !state.isGameOver && !state.isWaveComplete && !state.isBuyMenuOpen && !sniperBulletCam.active,
+  isActive: () => state.isPlaying && !state.isGameOver && !state.isGameComplete && !state.isWaveComplete && !state.isBuyMenuOpen && !sniperBulletCam.active,
   setMove: (x, y) => player.setTouchMove(x, y),
   setFire: active => {
     player.setFiring(active);
@@ -686,7 +688,7 @@ async function startGame() {
     clearMenuSelection();
     player.clearMovement();
     touchControls.reset();
-    if (state.isGameOver || mainMenuNeedsReset) {
+    if (state.isGameOver || state.isGameComplete || mainMenuNeedsReset) {
       await resetGame();
       mainMenuNeedsReset = false;
     }
@@ -879,6 +881,11 @@ function shouldInstantKillHeadshot(hit) {
   return Boolean(hit?.headshot);
 }
 
+function hasAllWeaponsOwned() {
+  const slots = weapon.getShopState?.();
+  return Array.isArray(slots) && slots.length > 0 && slots.every(slot => slot.owned);
+}
+
 function startWave() {
   if (!enemies) return;
 
@@ -894,7 +901,7 @@ function startWave() {
 }
 
 function refillActiveEnemies() {
-  if (!enemies || typeof enemies.spawnOne !== "function") return;
+  if (state.isGameComplete || !enemies || typeof enemies.spawnOne !== "function") return;
 
   while (enemies.count < state.enemyLimit) {
     if (!enemies.spawnOne(state.wave)) break;
@@ -943,6 +950,11 @@ function handleEnemyKilled({ headshot = false, count = 1 } = {}) {
 }
 
 function showWaveComplete() {
+  if (state.isFinalWave) {
+    showGameComplete();
+    return;
+  }
+
   projectiles.clear({ effects: false });
   cancelSniperBulletCamera();
   stopSecondaryAction();
@@ -960,9 +972,28 @@ function showWaveComplete() {
   showOverlay(`Wave ${state.wave} Complete`, `Ready for wave ${state.wave + 1}?`, "Next Wave");
 }
 
+function showGameComplete() {
+  projectiles.clear({ effects: false });
+  cancelSniperBulletCamera();
+  stopSecondaryAction();
+  state.isPlaying = false;
+  state.isWaveComplete = false;
+  state.isGameComplete = true;
+
+  player.clearMovement();
+
+  if (document.pointerLockElement === document.body) document.exitPointerLock();
+
+  document.body.classList.remove("cursor-locked", "fallback-look");
+
+  updateHud();
+  showOverlay("Game Complete", "You cleared the final wave!", "Play Again");
+}
+
 function continueWave() {
   if (!enemies) return;
 
+  state.isFinalWave = hasAllWeaponsOwned();
   state.isWaveComplete = false;
   setWaveShopVisible(false);
   state.wave += 1;
@@ -1918,6 +1949,8 @@ async function resetGame() {
   state.waveTargetScore = 0;
   state.enemyLimit = 0;
   state.isGameOver = false;
+  state.isGameComplete = false;
+  state.isFinalWave = false;
   state.isWaveComplete = false;
   state.isBuyMenuOpen = false;
   hud.hideBuyMenu();

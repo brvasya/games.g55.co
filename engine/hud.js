@@ -167,7 +167,7 @@ export function createHud() {
     reloadStatus.textContent = state.isReloading ? "Reloading…" : state.ammo === 0 ? (state.reserveAmmo > 0 ? "Press R to reload" : "Out of ammo · Press B for the shop") : "";
     reloadStatus.classList.toggle("visible", Boolean(reloadStatus.textContent));
     refs.score.textContent = state.score;
-    refs.wave.textContent = state.wave;
+    refs.wave.textContent = state.isFinalWave ? "FINAL" : state.wave;
     const waveScore = state.waveScore ?? 0;
     const waveTargetScore = state.waveTargetScore ?? 0;
 
