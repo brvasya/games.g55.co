@@ -13,6 +13,9 @@ import { createBulletHoles } from "./bulletHoles.js";
 
 const KILL_REWARD = 100;
 const HEADSHOT_REWARD = 100;
+const MULTIKILL_WINDOW_MS = 2000;
+const MULTIKILL_CASH_MULTIPLIER = 1.5;
+const MULTIKILL_MAX_CASH_MULTIPLIER = 2;
 
 function createLoadingButtonController() {
   const button = document.getElementById("startButton");
@@ -86,6 +89,8 @@ let mainMenuNeedsReset = false;
 let gameOverOverlayTimer = null;
 let noticeTimer = null;
 let lastWheelSwitch = -Infinity;
+let killComboCount = 0;
+let lastKillTime = -Infinity;
 
 THREE.DefaultLoadingManager.onStart = () => {
   if (!bootLoadingActive) return;
@@ -652,6 +657,7 @@ function returnToMainMenu() {
   state.isBuyMenuOpen = false;
   hud.hideBuyMenu();
   hud.clearHeadshot();
+  resetKillCombo();
   player.clearMovement();
   touchControls.reset();
   cancelSniperBulletCamera();
@@ -848,8 +854,25 @@ function getWaveEnemyLimit() {
   return Math.min(wave.baseEnemies + state.wave * wave.enemiesPerWave, wave.maxEnemies);
 }
 
-function getKillScore({ headshot = false } = {}) {
-  return KILL_REWARD + (headshot ? HEADSHOT_REWARD : 0);
+function getKillScore({ headshot = false, cashMultiplier = 1 } = {}) {
+  return Math.round(KILL_REWARD * cashMultiplier) + (headshot ? HEADSHOT_REWARD : 0);
+}
+
+function resetKillCombo() {
+  killComboCount = 0;
+  lastKillTime = -Infinity;
+}
+
+function getKillComboMultiplier(comboCount) {
+  if (comboCount >= 3) return MULTIKILL_MAX_CASH_MULTIPLIER;
+  if (comboCount === 2) return MULTIKILL_CASH_MULTIPLIER;
+  return 1;
+}
+
+function getKillComboMessage(comboCount) {
+  if (comboCount === 2) return "DOUBLE KILL x1.5";
+  if (comboCount === 3) return "TRIPLE KILL x2";
+  return "MULTIKILL x2";
 }
 
 function shouldInstantKillHeadshot(hit) {
@@ -859,6 +882,7 @@ function shouldInstantKillHeadshot(hit) {
 function startWave() {
   if (!enemies) return;
 
+  resetKillCombo();
   state.waveScore = 0;
   state.waveTargetScore = getWaveEnemyLimit();
   state.enemyLimit = getWaveEnemyLimit();
@@ -878,15 +902,35 @@ function refillActiveEnemies() {
 }
 
 function handleEnemyKilled({ headshot = false, count = 1 } = {}) {
-  const points = getKillScore({ headshot }) * count;
+  const killCount = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : 1;
+  const now = performance.now();
+  if (now - lastKillTime > MULTIKILL_WINDOW_MS) resetKillCombo();
 
-  if (headshot) {
+  const comboBefore = killComboCount;
+  let points = 0;
+  for (let i = 0; i < killCount; i++) {
+    const comboNumber = killComboCount + 1;
+    points += getKillScore({
+      headshot: headshot && i === 0,
+      cashMultiplier: getKillComboMultiplier(comboNumber)
+    });
+    killComboCount = comboNumber;
+  }
+  lastKillTime = now;
+
+  const notificationTier = [4, 3, 2].find(tier => comboBefore < tier && killComboCount >= tier);
+  if (notificationTier) {
+    hud.showCombatMessage(getKillComboMessage(notificationTier));
+    if (notificationTier === 2) sounds.playDoubleKill();
+    else if (notificationTier === 3) sounds.playTripleKill();
+    else sounds.playMultiKill();
+  } else if (headshot) {
     hud.showHeadshot();
     sounds.playHeadshot();
   }
 
   state.score += points;
-  state.waveScore += count;
+  state.waveScore += killCount;
 
   // A simultaneous self-kill must stay Game Over, even on the final enemy.
   if (!state.isGameOver && state.waveScore >= state.waveTargetScore) {
@@ -1865,6 +1909,7 @@ function endGame() {
 async function resetGame() {
   clearTimeout(gameOverOverlayTimer);
   hud.clearHeadshot();
+  resetKillCombo();
   player.clearMovement();
   state.health = 100;
   state.score = 0;

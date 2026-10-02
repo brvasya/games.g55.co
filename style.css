@@ -1062,10 +1062,12 @@ body.keyboard-navigation #buyMenu .cs-buy-close:focus { outline: 2px solid var(-
   pointer-events: none;
   transform: translate(-50%, -50%) scale(0.86);
   opacity: 0;
+  max-width: calc(100vw - 32px);
   color: #fff;
-  font: 900 clamp(28px, 4vw, 54px)/1 var(--ui-font);
+  font: 900 clamp(20px, 4vw, 54px)/1 var(--ui-font);
   letter-spacing: 0.08em;
   text-align: center;
+  white-space: nowrap;
   text-shadow: 0 2px 16px rgba(255, 44, 44, 0.42);
 }
 

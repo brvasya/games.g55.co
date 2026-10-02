@@ -7,6 +7,9 @@ export function createSounds() {
   const DEATH_SOUND = "./assets/death.ogg";
   const HIT_SOUND = "./assets/damage.ogg";
   const HEADSHOT_SOUND = "./assets/headshot.ogg";
+  const DOUBLE_KILL_SOUND = "./assets/doublekill.ogg";
+  const TRIPLE_KILL_SOUND = "./assets/triplekill.ogg";
+  const MULTIKILL_SOUND = "./assets/multikill.ogg";
 
   if (masterGain) {
     masterGain.gain.value = 1.0;
@@ -119,6 +122,24 @@ export function createSounds() {
     if (!ctx) return;
     resume();
     playFromAsset(HEADSHOT_SOUND, 1.0);
+  }
+
+  function playDoubleKill() {
+    if (!ctx) return;
+    resume();
+    playFromAsset(DOUBLE_KILL_SOUND, 1.0);
+  }
+
+  function playTripleKill() {
+    if (!ctx) return;
+    resume();
+    playFromAsset(TRIPLE_KILL_SOUND, 1.0);
+  }
+
+  function playMultiKill() {
+    if (!ctx) return;
+    resume();
+    playFromAsset(MULTIKILL_SOUND, 1.0);
   }
 
   // UPDATED: use base64 hit sound instead of oscillator
@@ -241,6 +262,9 @@ export function createSounds() {
     playEnemyHit,
     playEnemyDie,
     playHeadshot,
+    playDoubleKill,
+    playTripleKill,
+    playMultiKill,
     playPlayerHit,
     playFootstep,
     playJump,
