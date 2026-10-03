@@ -1,6 +1,5 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 
 // Keep the Draco decoder version aligned with the Three.js version used by
 // index.html's import map.
@@ -13,7 +12,6 @@ export function createGLTFLoader() {
 
   const loader = new GLTFLoader();
   loader.setDRACOLoader(dracoLoader);
-  loader.setMeshoptDecoder(MeshoptDecoder);
 
   return loader;
 }
