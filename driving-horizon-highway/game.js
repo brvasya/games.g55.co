@@ -55,6 +55,28 @@ const rewardTarget = rewardCue.querySelector('span');
 const isTouchDevice = () => document.documentElement.classList.contains('touch');
 const needsLandscape = () => isTouchDevice() && innerHeight > innerWidth;
 
+const scoreFitCache = new WeakMap();
+function fitScoreText(element, force = false) {
+  const width = element.clientWidth;
+  if (!width) return;
+  const length = element.textContent.length;
+  const previous = scoreFitCache.get(element);
+  if (!force && previous?.width === width && previous?.length === length) return;
+
+  // Measure at the responsive base size; only long values need smaller text.
+  element.style.removeProperty('--fit-score-size');
+  const fontSize = parseFloat(getComputedStyle(element).fontSize);
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const textWidth = range.getBoundingClientRect().width;
+  const available = Math.max(1, width - 4);
+  if (textWidth > available) {
+    const fittedSize = Math.floor(fontSize * available / textWidth * 100) / 100;
+    element.style.setProperty('--fit-score-size', `${fittedSize}px`);
+  }
+  scoreFitCache.set(element, { width, length });
+}
+
 const MORE_GAMES_URL = `https://g55.co/?utm_source=moreGamesButton&utm_medium=${encodeURIComponent(document.title)}`;
 document.querySelectorAll('.more-games-link').forEach(link => {
   link.href = MORE_GAMES_URL;
@@ -1982,7 +2004,10 @@ function openGarage(origin = 'menu') {
 function closeGarage() {
   garage.classList.remove('visible');
   if (garageOrigin === 'paused') pauseMenu.classList.add('visible');
-  else if (garageOrigin === 'gameover') gameOver.classList.add('visible');
+  else if (garageOrigin === 'gameover') {
+    gameOver.classList.add('visible');
+    fitScoreText(finalScore, true);
+  }
   else menu.classList.add('visible');
   updateOrientation();
   window.G55UI.syncDialogs();
@@ -2466,6 +2491,7 @@ function endGame() {
   }
   bestScore.textContent = newBest.toLocaleString();
   gameOver.classList.add('visible');
+  fitScoreText(finalScore, true);
   window.G55UI.syncDialogs();
 }
 
@@ -3735,6 +3761,7 @@ function updateHUD() {
   speedValue.textContent = Math.round(state.speed);
   nitroFill.style.transform = `scaleX(${state.nitro})`;
   scoreValue.textContent = Math.floor(state.score).toLocaleString();
+  fitScoreText(scoreValue);
   comboValue.textContent = `×${state.combo.toFixed(2)}`;
   distanceValue.textContent = `${(state.distance / 1000).toFixed(1)} KM`;
   if (locationValue) locationValue.textContent = currentZone().name;
@@ -3857,6 +3884,8 @@ function resize() {
   renderer.setPixelRatio(qualityPixelRatio);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  fitScoreText(scoreValue, true);
+  fitScoreText(finalScore, true);
 }
 addEventListener('resize', () => { resize(); clearHeldInput(); updateOrientation(); });
 
