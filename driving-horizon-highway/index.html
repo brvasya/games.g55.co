@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en" class="preloading has-overlay">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#090d12" />
+  <title>Driving: Horizon Highway</title>
+<style id="first-paint-menu">
+/* Main-menu first paint: also embedded in index.html. */
+:root{--bg:#080c11;--text:#f7fbff;--muted:#b6c3d0;--line:rgba(255,255,255,.22);--accent:#ff2f87;--warm:#ff704d;--cyan:#2bdcff;--good:#8ee6ad;--danger:#ff918b;--action-columns:minmax(0,1.45fr) minmax(0,1fr);--action-gap:10px}
+*{box-sizing:border-box}html,body,#app{margin:0;width:100%;height:100%;height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}body{touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none}button,a,input{-webkit-tap-highlight-color:transparent}button,input{font:inherit}button,a{touch-action:manipulation}button{cursor:pointer}button:disabled{cursor:default}button:focus,a:focus,input:focus{outline:none}.keyboard-nav :is(button,a,input):focus{outline:3px solid var(--cyan);outline-offset:3px}.hidden,[hidden]{display:none!important}#game{position:absolute;inset:0;width:100%;height:100%;display:block}
+.overlay{position:absolute;inset:0;z-index:10;display:none;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));background:linear-gradient(90deg,rgba(3,7,11,.92),rgba(3,7,11,.67) 48%,rgba(3,7,11,.35));overflow:hidden}.overlay.visible{display:flex}.overlay:focus{outline:none}
+#menu{justify-content:flex-start}.menu-shell{width:min(650px,100%);margin-left:clamp(0px,4vw,60px);max-height:100%;flex:none}.brand-logo{display:block;width:128px;height:32.52px;object-fit:contain;filter:invert(1);margin:0 0 26px}.eyebrow{color:#c5d5e1;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.eyebrow-dot{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:8px;background:linear-gradient(90deg,var(--accent),var(--cyan))}h1,h2,p{margin:0}h1{font-style:italic;font-weight:900;letter-spacing:-.045em;line-height:.96;text-shadow:0 6px 24px #0006}.title-prefix{display:block;font-size:clamp(20px,3vw,29px);line-height:1.25;letter-spacing:.035em;color:var(--cyan);margin-bottom:5px}.title-theme{display:block;font-size:clamp(42px,7vw,60px);color:#fff;white-space:nowrap}.menu-highscore{width:min(530px,100%);margin-top:20px}.menu-score-label{display:block;color:var(--cyan);font-size:11px;font-weight:800;letter-spacing:.13em;line-height:1.3}.menu-score-value{margin-top:4px;color:var(--text);font-size:48px;font-style:italic;font-weight:900;letter-spacing:-.055em;line-height:1.12;font-variant-numeric:tabular-nums;white-space:nowrap}.menu-help{margin-top:18px;max-width:530px;min-height:36px;color:#d3dee7;font-size:12px;font-weight:700;line-height:1.5}.touch-copy{display:none}.touch .desktop-copy{display:none}.touch .touch-copy{display:block}
+.menu-actions{width:min(530px,100%);margin-top:20px}.menu-primary-actions,.paired-primary-actions,.menu-secondary-actions{display:grid;grid-template-columns:var(--action-columns);gap:var(--action-gap)}.primary,.secondary-button{min-width:0;min-height:54px;padding:10px 16px;border-radius:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:14px;line-height:1.2;font-weight:800;letter-spacing:.055em;text-decoration:none}.primary{position:relative;isolation:isolate;border:1px solid transparent;color:#fff;background:linear-gradient(110deg,#e71e70,#e95137);box-shadow:0 8px 24px #ff2f8720}.primary:hover:not(:disabled){filter:brightness(1.1)}.primary:disabled{background:#29313c;box-shadow:none}.secondary-button{color:#f4f8fc;background:rgba(20,29,40,.88);border:1px solid rgba(220,238,255,.42)}.secondary-button:hover{background:#293c4b;border-color:#e5f6ff}#startBtn{--load:0%;overflow:hidden}#startBtn::before{content:'';position:absolute;inset:0 auto 0 0;width:var(--load);background:linear-gradient(110deg,#e71e70,#e95137);z-index:-1}#startBtn[aria-busy="false"]::before{width:100%}#startBtn.load-failed{background:#842c3b}#startBtn.load-failed::before{display:none}#startLabel{position:relative;display:block;width:100%;white-space:nowrap;text-align:center;font-variant-numeric:tabular-nums}
+.quiet{min-width:0;min-height:44px;border:0;border-radius:7px;padding:8px 6px;background:transparent;color:#c4d2dd;font-size:12px;font-weight:700;line-height:1.2;text-align:center;letter-spacing:.035em}.quiet:hover:not(:disabled){background:#ffffff0d;color:#fff}.quiet:disabled{color:#8693a0;opacity:.65}.menu-secondary-actions{margin-top:8px}.load-status{height:32px;padding-top:8px;color:#ffc4bb;font-size:12px;line-height:16px;overflow:hidden}
+.audio-toggle{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:8;min-width:72px;height:44px;padding:8px;border:1px solid var(--line);border-radius:9px;color:#fff;background:#101c2de0;font-size:11px;font-weight:800}.has-overlay>.audio-toggle,.has-overlay #muteBtn{display:none}.audio-toggle[aria-pressed="true"]{color:#ffc1d7}.ui-notice{position:absolute;bottom:max(14px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:40;max-width:90%;padding:10px 16px;border-radius:9px;color:#fff;background:#111d2eef;font-size:13px;pointer-events:none}.ui-notice:empty{display:none}
+@media(max-width:700px){#menu{justify-content:center}.menu-shell{margin-left:0}.brand-logo{margin-bottom:20px}.menu-help{font-size:12px}.menu-actions{width:min(530px,100%)}}
+@media(max-width:460px){.overlay{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}.brand-logo{width:112px;height:28.45px}.title-prefix{font-size:19px}.title-theme{font-size:clamp(28px,8vw,42px)}.menu-highscore{margin-top:16px}.menu-score-value{font-size:34px}.menu-primary-actions .primary,.menu-primary-actions .secondary-button{min-height:48px}.menu-actions{--action-columns:1fr;--action-gap:8px;margin-top:14px}.menu-help{margin-top:12px}.load-status{font-size:11px}}
+@media(max-height:620px) and (min-width:461px){.brand-logo{width:106px;height:26.93px;margin-bottom:14px}.title-prefix{font-size:20px}.title-theme{font-size:60px}.menu-highscore{margin-top:12px}.menu-score-value{font-size:40px}.menu-help{margin-top:10px;min-height:32px}.menu-actions{margin-top:12px}.primary,.secondary-button{min-height:48px}.load-status{height:26px;padding-top:4px}}
+@media(max-height:420px) and (min-width:461px){.overlay{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:max(8px,env(safe-area-inset-bottom))}.brand-logo{width:96px;height:24.39px;margin-bottom:9px}.title-prefix{font-size:18px;margin-bottom:2px}.title-theme{font-size:clamp(42px,7vw,48px)}.menu-highscore{margin-top:10px}.menu-score-value{margin-top:3px;font-size:32px}.menu-help{margin-top:8px;min-height:30px;font-size:12px;line-height:1.25}.menu-actions{margin-top:10px}.menu-secondary-actions{margin-top:4px}.primary,.secondary-button{min-height:46px;font-size:13px}.load-status{height:21px;font-size:11px;padding-top:3px}}
+@media(max-width:380px) and (max-height:620px){.brand-logo{margin-bottom:14px}.menu-help{margin-top:10px;font-size:11px;min-height:32px}.menu-actions{margin-top:12px}.load-status{height:26px;padding-top:4px}}
+@media(min-width:701px){html:not(.touch) .menu-highscore{position:absolute;top:max(24px,env(safe-area-inset-top));right:max(28px,env(safe-area-inset-right));width:max-content;max-width:calc(100% - 48px);margin:0;text-align:right;text-shadow:0 2px 8px #000b,0 0 20px #0006}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;transition:none!important}}
+</style>
+<script>document.documentElement.classList.toggle("touch", matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0);</script>
+<link id="gameStyles" rel="stylesheet" href="style.css" media="print" onload="this.media='all';this.dataset.loaded='true'" onerror="this.dataset.failed='true'" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+    <button id="muteBtn" data-sound-toggle class="audio-toggle" type="button" aria-label="Mute game audio" aria-pressed="false">SOUND</button>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top-left hud-glass score-cluster">
+        <div class="hud-kicker">SCORE</div>
+        <div id="scoreValue" class="score-value">0</div>
+        <div class="combo-row">
+          <span id="comboValue" class="combo-value">×1.00</span>
+          <span class="combo-caption">COMBO</span>
+        </div>
+        <div id="rewardCue" class="reward-cue"><strong>RUN REWARD · 0 PTS</strong><span>1 PT at 1,200 score</span></div>
+      </div>
+
+      <div class="hud-route">
+        <div class="hud-glass route-card">
+          <span id="locationValue" class="location-value">OPEN COUNTRY</span>
+          <span class="route-divider"></span>
+          <span id="distanceValue" class="distance-value">0.0 KM</span>
+          <span id="timeValue" class="time-value">08:30 · DAY</span>
+        </div>
+        <div id="eventValue" class="event-value"></div>
+      </div>
+
+      <div id="message" class="message" role="status"></div>
+
+      <div class="hud-bottom-left hud-glass damage-card">
+        <span class="hud-kicker">CAR STATUS</span>
+        <div id="healthSegments" class="health-segments" aria-label="Vehicle health">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <div id="speedCluster" class="speed-cluster">
+        <div class="speed-readout">
+          <span id="speedValue">0</span>
+          <span class="speed-unit">KM/H</span>
+        </div>
+        <div class="speed-arc" aria-hidden="true"><span></span></div>
+        <div id="nitroMeter" class="nitro-meter hud-glass">
+          <div class="nitro-head">
+            <span>BOOST</span>
+            <span id="nitroStatus">72%</span>
+          </div>
+          <div class="meter-track"><div id="nitroFill" class="meter-fill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="touchControls" class="touch-controls hidden">
+      <div class="touch-utility" aria-label="Mobile game controls">
+        <button id="touchCamera" class="utility-touch-button" type="button" aria-label="Toggle camera view">VIEW</button>
+        <button id="touchPause" class="utility-touch-button" type="button" aria-label="Pause game">Ⅱ</button>
+      </div>
+      <div class="touch-left">
+        <button id="touchLeft" class="steer-button" aria-label="Steer left">‹</button>
+        <button id="touchRight" class="steer-button" aria-label="Steer right">›</button>
+      </div>
+      <div class="touch-right">
+        <button id="touchBrake" class="brake-button" aria-label="Brake">BRAKE</button>
+        <button id="touchAccelerate" class="accelerator-button" type="button" aria-label="Accelerate">GAS</button>
+        <button id="touchNitro" class="nitro-button" aria-label="Nitro">BOOST</button>
+      </div>
+    </div>
+
+    <div id="menu" class="overlay visible" role="dialog" aria-modal="true" aria-labelledby="gameTitle" tabindex="-1">
+      <div class="menu-shell">
+        <img class="brand-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPgAAAA/CAYAAADNPAUHAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAhJJREFUeNrs3UFuwjAUBcDY4kg5kw/FmbiTKyRYtGoCVRPjb88sukLwcHiJDU2Saq0LMKbL/c+6rnuP6W0PkDrONnruVmrQMag9ZbvdbksONtBLKSXklEPusOV+dww+lXvzda/X627Bzd2Z/cgdJffm62flRkmGyF3fLbhyo9wxc9dXBVdulDt27rpVcOVGSXbcv5UOkrv+LLhyo9xjlPtbzuxzBuPuRBUcBqbgoOCAggMKDig4oODAlssRT1JKCfnm5Y5rhm13P92zi4I/wqSIAy53XC3H4Mgdyh9y//u/5kzRwRocUHBAwYE2LjO/+ce3lEee/pfkxhF8XK5OgoIrudwouJLLTYdr8LM/JClQWVLQkluTO4J/RrA7hDiSo+Cm63Kj4EouNwpuaSE3Cg4KDig4oOCAggMKDig4TCz6+eCp1e+0R1zhcoDcKHhbDa+sWeXGFB1QcCDmFH13fWlNCMHX4C/Wl9aEYIoOdHEEP+Eyvu9ynnWs3If9ctD4Mxc1tyM47Tgn3hQdUHBAwUHBAQUHFBxQcKBhwUPci6qUEnKQ5f5VqPufreu6ROxKjjLgz8ANz6OW+/zcSn7ujjnlCAOuJEPnjnon0xBdyb0HV5Ipciv5Sdsu9xxcSabKreQnbLvca3AlmTK3kh+87XKPwZVk6txKfuC2S7XW5wP2nqd2PGA16IaeNbfxaZjtS4ABAKJ04U5ThTiQAAAAAElFTkSuQmCC" width="248" height="63" alt="G55.CO" />
+        <h1 id="gameTitle"><span class="title-prefix">DRIVING:</span><span class="title-theme">HORIZON HIGHWAY</span></h1>
+        <div class="menu-highscore" role="group" aria-labelledby="highScoreLabel">
+          <span id="highScoreLabel" class="menu-score-label">HIGH SCORE</span>
+          <div id="bestScore" class="menu-score-value">0</div>
+        </div>
+        <div class="menu-help">
+          <span class="desktop-copy">WASD / ARROWS DRIVE · SPACE BOOST · C VIEW<br>ESC PAUSE · F FULLSCREEN · M SOUND</span>
+          <span class="touch-copy">ARROWS STEER · HOLD GAS TO ACCELERATE<br>BRAKE TO SLOW · BOOST FOR EXTRA SPEED</span>
+        </div>
+        <div class="menu-actions">
+          <div class="menu-primary-actions">
+            <button id="startBtn" class="primary" aria-busy="true" disabled><span id="startLabel">LOADING 0%</span></button>
+            <a class="secondary-button more-games-link" href="https://g55.co/?utm_source=moreGamesButton&amp;utm_medium=Driving%3A%20Horizon%20Highway" target="_blank" rel="noopener">MORE GAMES</a>
+          </div>
+          <div class="menu-secondary-actions">
+            <button id="garageBtn" class="quiet" disabled>GARAGE</button>
+            <button class="quiet" data-fullscreen>FULLSCREEN</button>
+          </div>
+          <p id="loadStatus" class="load-status" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="gameOver" class="overlay" role="dialog" aria-modal="true" aria-label="Run results" tabindex="-1">
+      <div class="panel result-panel">
+        <div id="finalBadge" class="result-badge">RUN COMPLETE</div>
+        <div class="eyebrow">HIGHWAY SCORE</div>
+        <div id="finalScore" class="final-score">0</div>
+        <div id="finalStats" class="final-stats">0.0 km · 0 near misses · 0 overtakes</div>
+        <div class="paired-primary-actions result-primary-actions">
+          <button id="restartBtn" class="primary">RETRY</button>
+          <a class="secondary-button more-games-link" href="https://g55.co/?utm_source=moreGamesButton&amp;utm_medium=Driving%3A%20Horizon%20Highway" target="_blank" rel="noopener">MORE GAMES</a>
+        </div>
+        <div class="secondary-actions result-actions">
+          <button id="gameOverGarageBtn" class="quiet">GARAGE</button>
+          <button id="menuBtn" class="quiet">MAIN MENU</button>
+        </div>
+        <div class="retry-hint">ENTER / R TO RETRY</div>
+      </div>
+    </div>
+
+
+    <div id="pauseMenu" class="overlay pause-overlay" role="dialog" aria-modal="true" aria-label="Paused" tabindex="-1">
+      <div class="panel pause-panel">
+        <div class="eyebrow"><span class="eyebrow-dot"></span> DRIVE PAUSED</div>
+        <h2>PAUSED</h2>
+        <p class="pause-copy">The highway is frozen. Resume when you're ready.</p>
+        <div class="paired-primary-actions pause-primary-actions">
+          <button id="resumeBtn" class="primary compact-primary">RESUME DRIVE</button>
+          <a class="secondary-button more-games-link" href="https://g55.co/?utm_source=moreGamesButton&amp;utm_medium=Driving%3A%20Horizon%20Highway" target="_blank" rel="noopener">MORE GAMES</a>
+        </div>
+        <div class="pause-actions">
+          <button id="pauseGarageBtn" class="quiet">GARAGE</button>
+          <button id="pauseMenuBtn" class="quiet pause-menu-button">MAIN MENU</button>
+          <button class="quiet" data-fullscreen>FULLSCREEN</button>
+        </div>
+        <div class="retry-hint">ESC TO RESUME</div>
+      </div>
+    </div>
+
+
+    <div id="garage" class="overlay garage-overlay" role="dialog" aria-modal="true" aria-label="Garage" tabindex="-1">
+      <div class="panel garage-panel">
+        <div class="garage-header">
+          <button id="garageBackBtn" class="quiet garage-back-button" aria-label="Back to menu">←</button>
+          <div>
+            <div class="eyebrow"><span class="eyebrow-dot"></span> FALCON S GARAGE</div>
+            <h2>GARAGE</h2>
+            <div class="garage-hint">Run rewards buy permanent upgrades.</div>
+            <p class="garage-copy">Spend Upgrade Points to permanently improve this car. Changes apply immediately and are saved automatically.</p>
+          </div>
+          <button id="paintToggle" class="quiet">PAINT</button>
+          <div class="garage-points-box">
+            <span>POINTS</span>
+            <strong id="upgradePoints">0</strong>
+          </div>
+        </div>
+
+        <div class="garage-tabs" role="tablist" aria-label="Garage view"><button class="quiet" data-garage-tab="upgrades" role="tab" aria-selected="true">UPGRADES</button><button class="quiet" data-garage-tab="paint" role="tab" aria-selected="false">PAINT</button></div>
+        <div class="garage-summary">
+          <div><span>TOTAL DISTANCE</span><strong id="garageProgress">0.0 KM</strong></div>
+          <div><span>BEST SCORE</span><strong id="carBest">0</strong></div>
+          <div><span>CAR LEVEL</span><strong id="garageCarLevel">4 / 20</strong></div>
+        </div>
+
+        <div class="paint-customizer" aria-label="Car paint color" hidden>
+          <div class="paint-meta">
+            <strong>PAINT</strong>
+            <span id="paintColorValue">#F41D7B</span>
+          </div>
+          <div class="paint-swatches">
+            <button class="paint-swatch" type="button" data-paint="#f41d7b" style="--paint:#f41d7b" aria-label="Horizon pink"></button>
+            <button class="paint-swatch" type="button" data-paint="#ef3340" style="--paint:#ef3340" aria-label="Racing red"></button>
+            <button class="paint-swatch" type="button" data-paint="#ff7a1a" style="--paint:#ff7a1a" aria-label="Sunset orange"></button>
+            <button class="paint-swatch" type="button" data-paint="#ffd23f" style="--paint:#ffd23f" aria-label="Solar yellow"></button>
+            <button class="paint-swatch" type="button" data-paint="#39d47a" style="--paint:#39d47a" aria-label="Lime green"></button>
+            <button class="paint-swatch" type="button" data-paint="#29b6f6" style="--paint:#29b6f6" aria-label="Electric blue"></button>
+            <button class="paint-swatch" type="button" data-paint="#8a5cff" style="--paint:#8a5cff" aria-label="Violet"></button>
+            <label class="paint-swatch paint-custom" title="Custom color" aria-label="Custom paint color">
+              <input id="customPaintPicker" type="color" value="#f41d7b" aria-label="Choose custom car color" />
+              <span>+</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="upgrade-list">
+          <div class="upgrade-row" data-upgrade-row="engine">
+            <div class="upgrade-row-main">
+              <div class="upgrade-name-line"><strong>ENGINE</strong><span data-level="engine">LV 1/5</span></div>
+              <div class="upgrade-effect" data-effect="engine">Top speed 292 km/h</div>
+            </div>
+            <button class="upgrade-button" data-upgrade="engine">UPGRADE · 1 PT</button>
+          </div>
+
+          <div class="upgrade-row" data-upgrade-row="handling">
+            <div class="upgrade-row-main">
+              <div class="upgrade-name-line"><strong>HANDLING</strong><span data-level="handling">LV 1/5</span></div>
+              <div class="upgrade-effect" data-effect="handling">Steering 100%</div>
+            </div>
+            <button class="upgrade-button" data-upgrade="handling">UPGRADE · 1 PT</button>
+          </div>
+
+          <div class="upgrade-row" data-upgrade-row="nitro">
+            <div class="upgrade-row-main">
+              <div class="upgrade-name-line"><strong>NITRO</strong><span data-level="nitro">LV 1/5</span></div>
+              <div class="upgrade-effect" data-effect="nitro">Boost efficiency 100%</div>
+            </div>
+            <button class="upgrade-button" data-upgrade="nitro">UPGRADE · 1 PT</button>
+          </div>
+
+          <div class="upgrade-row" data-upgrade-row="armor">
+            <div class="upgrade-row-main">
+              <div class="upgrade-name-line"><strong>ARMOR</strong><span data-level="armor">LV 1/5</span></div>
+              <div class="upgrade-effect" data-effect="armor">Survives 1 hit</div>
+            </div>
+            <button class="upgrade-button" data-upgrade="armor">UPGRADE · 1 PT</button>
+          </div>
+        </div>
+
+        <div class="garage-actions">
+          <div class="paired-primary-actions garage-primary-actions">
+            <button id="garageActionBtn" class="primary compact-primary">START DRIVE</button>
+            <a class="secondary-button more-games-link" href="https://g55.co/?utm_source=moreGamesButton&amp;utm_medium=Driving%3A%20Horizon%20Highway" target="_blank" rel="noopener">MORE GAMES</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="rotatePrompt" class="overlay rotate-overlay" role="dialog" aria-modal="true" aria-labelledby="rotateTitle" tabindex="-1">
+      <div class="panel rotate-panel"><div class="rotate-icon" aria-hidden="true">↻</div><h2 id="rotateTitle">TURN TO DRIVE</h2><p>Rotate your device to landscape.<br>Your drive is paused.</p><div class="paired-primary-actions"><button id="rotateMenuBtn" class="primary">MAIN MENU</button><a class="secondary-button more-games-link" href="https://g55.co/?utm_source=moreGamesButton&amp;utm_medium=Driving%3A%20Horizon%20Highway" target="_blank" rel="noopener">MORE GAMES</a></div></div>
+    </div>
+    <div id="uiNotice" class="ui-notice" role="status" aria-live="polite"></div>
+    <div id="crashFlash" class="crash-flash"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"
+    }
+  }
+  </script>
+  <!-- Early UI remains usable while the game module loads. -->
+  <script>
+(() => {
+  const html = document.documentElement;
+  // Show the saved record before the game module and assets finish loading.
+  try {
+    const profile = JSON.parse(localStorage.getItem('g55HighwayProgression') || '{}');
+    const savedBest = Number(localStorage.getItem('g55HighwayBest') || 0);
+    const profileBest = Number(profile.bestScore || profile.bests?.['falcon-s'] || 0);
+    document.getElementById('bestScore').textContent = Math.max(0, savedBest, profileBest).toLocaleString();
+  } catch { /* storage can be unavailable in private embeds */ }
+  const start = document.getElementById('startBtn');
+  const startLabel = document.getElementById('startLabel');
+  const status = document.getElementById('loadStatus');
+  const notice = document.getElementById('uiNotice');
+  const overlays = [...document.querySelectorAll('.overlay')];
+  let noticeTimer, previousDialog = null;
+  let muted = false;
+  try { muted = localStorage.getItem('g55HighwayMuted') === '1'; } catch {}
+
+  function announce(text) {
+    clearTimeout(noticeTimer);
+    notice.textContent = text;
+    noticeTimer = setTimeout(() => { notice.textContent = ''; }, 2300);
+  }
+  function setSoundMuted(value) {
+    muted = !!value;
+    document.querySelectorAll('[data-sound-toggle]').forEach(button => {
+      button.textContent = muted ? 'SOUND OFF' : 'SOUND ON';
+      button.setAttribute('aria-pressed', String(muted));
+      button.setAttribute('aria-label', muted ? 'Turn sound on' : 'Turn sound off');
+    });
+  }
+  async function fullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else throw new Error('unavailable');
+    } catch { announce('Fullscreen is unavailable here.'); }
+  }
+  function activeDialog() {
+    return document.querySelector('#rotatePrompt.visible') || overlays.find(el => el.classList.contains('visible')) || null;
+  }
+  function focusable(dialog) {
+    return [...dialog.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),[tabindex="0"]')]
+      .filter(el => el.tabIndex >= 0 && el.getClientRects().length && !el.closest('[hidden],[inert]'));
+  }
+  function syncDialogs() {
+    const active = activeDialog();
+    html.classList.toggle('has-overlay', !!active);
+    overlays.forEach(el => {
+      const blocked = el !== active;
+      el.inert = blocked;
+      el.setAttribute('aria-hidden', String(blocked));
+    });
+    if (active && active !== previousDialog) {
+      const preferred = active.querySelector('.primary:not(:disabled)');
+      (preferred || focusable(active)[0] || active).focus({ preventScroll: true });
+    }
+    previousDialog = active;
+  }
+  window.G55UI = { announce, fullscreen, setSoundMuted, syncDialogs, activeDialog, onSoundToggle: null };
+  document.querySelectorAll('[data-fullscreen]').forEach(el => el.addEventListener('click', fullscreen));
+  document.addEventListener('fullscreenchange', () => {
+    document.querySelectorAll('[data-fullscreen]').forEach(el => { el.textContent = document.fullscreenElement ? 'EXIT FULLSCREEN' : 'FULLSCREEN'; });
+  });
+  document.querySelectorAll('[data-sound-toggle]').forEach(el => el.addEventListener('click', () => {
+    if (window.G55UI.onSoundToggle) window.G55UI.onSoundToggle();
+    else {
+      setSoundMuted(!muted);
+      try { localStorage.setItem('g55HighwayMuted', muted ? '1' : '0'); } catch {}
+    }
+  }));
+  setSoundMuted(muted);
+  document.addEventListener('pointerdown', () => html.classList.remove('keyboard-nav'), true);
+  document.addEventListener('keydown', e => {
+    if (e.code === 'KeyF' && !e.repeat && !e.target.matches('input,textarea,[contenteditable="true"]')) {
+      e.preventDefault(); fullscreen(); return;
+    }
+    if (e.key !== 'Tab') return;
+    html.classList.add('keyboard-nav');
+    const active = activeDialog();
+    if (!active) return;
+    const items = focusable(active);
+    if (!items.length) { e.preventDefault(); active.focus(); return; }
+    const index = items.indexOf(document.activeElement);
+    if (index < 0 || (e.shiftKey && index === 0) || (!e.shiftKey && index === items.length - 1)) {
+      e.preventDefault(); items[e.shiftKey ? items.length - 1 : 0].focus();
+    }
+  }, true);
+  const observer = new MutationObserver(syncDialogs);
+  overlays.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ['class'] }));
+  syncDialogs();
+
+  const css = document.getElementById('gameStyles');
+  const stylesReady = new Promise((resolve, reject) => {
+    if (css.dataset.loaded === 'true') return resolve();
+    if (css.dataset.failed === 'true') return reject(new Error('Styles unavailable'));
+    css.addEventListener('load', resolve, { once: true });
+    css.addEventListener('error', () => reject(new Error('Styles unavailable')), { once: true });
+  });
+  // Observe rejection immediately, even while the game module is still downloading.
+  stylesReady.catch(() => window.G55Boot?.fail());
+  let watchdog;
+  window.G55Boot = {
+    isReady: false,
+    failed: false,
+    progress(value) {
+      if (this.failed || this.isReady) return;
+      const percent = Math.min(99, Math.max(0, Math.round(value * 100)));
+      startLabel.textContent = `LOADING ${percent}%`;
+      start.style.setProperty('--load', `${percent}%`);
+    },
+    fail() {
+      if (this.isReady) return;
+      clearTimeout(watchdog);
+      this.failed = true;
+      start.disabled = false;
+      start.classList.add('load-failed');
+      start.setAttribute('aria-busy', 'false');
+      startLabel.textContent = 'RETRY LOADING';
+      status.textContent = 'Could not finish loading. Tap Retry to reconnect.';
+    },
+    async ready() {
+      try { await stylesReady; } catch { this.fail(); return; }
+      clearTimeout(watchdog);
+      this.isReady = true;
+      this.failed = false;
+      html.classList.remove('preloading');
+      start.classList.remove('load-failed');
+      start.setAttribute('aria-busy', 'false');
+      start.style.setProperty('--load', '100%');
+      startLabel.textContent = 'START DRIVE';
+      start.disabled = false;
+      document.getElementById('garageBtn').disabled = false;
+      status.textContent = '';
+    }
+  };
+  start.addEventListener('click', e => {
+    if (!window.G55Boot.failed) return;
+    e.preventDefault(); e.stopImmediatePropagation(); location.reload();
+  }, true);
+  watchdog = setTimeout(() => window.G55Boot.fail(), 30000);
+  import('./game.js').catch(error => {
+    console.error('[startup]', error);
+    window.G55Boot.fail();
+  });
+})();
+
+  </script>
+</body>
+</html>
