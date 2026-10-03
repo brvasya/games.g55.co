@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/DRACOLoader.js';
+import { gameConfig } from './gameConfig.js';
 
 const canvas = document.querySelector('#game');
 const startBtn = document.querySelector('#startBtn');
@@ -1280,7 +1281,7 @@ function normalizeOptionalCarModel(model, def) {
   const safeX = Math.max(size.x, 0.001);
   const safeY = Math.max(size.y, 0.001);
   const safeZ = Math.max(size.z, 0.001);
-  const fitScale = Math.min(targetWidth / safeX, targetHeight / safeY, targetLength / safeZ) * 1.30;
+  const fitScale = Math.min(targetWidth / safeX, targetHeight / safeY, targetLength / safeZ) * gameConfig.playerCar.scale;
   model.scale.multiplyScalar(fitScale);
   model.updateMatrixWorld(true);
 
@@ -1617,6 +1618,8 @@ function createPlayerVehicle(def) {
   } else {
     const model = createCar(def.color, true);
     model.scale.set(def.shape[0], def.shape[1], def.shape[2]);
+    // Match the GLB size adjustment while preserving the fallback's default size.
+    model.scale.multiplyScalar(gameConfig.playerCar.scale / 1.30);
     root.add(model);
     root.userData.modelType = 'procedural';
     root.userData.modelFile = null;
@@ -1657,9 +1660,6 @@ world.add(player);
 
 let cameraMode = 'chase';
 const cockpitWorldScale = new THREE.Vector3(1, 1, 1);
-const COCKPIT_BACK_WORLD = 4.45 * 0.25; // 15% of the normalized car length, toward the cabin (+Z).
-const COCKPIT_LEFT_WORLD = 2.05 * 0.20; // 20% of the normalized car width, toward the driver's left (-X).
-const COCKPIT_UP_WORLD = 1.80 * 0.00; // 5% of the normalized car height, upward (+Y).
 
 function setCameraMode(mode, announce = true) {
   if (mode === 'cockpit') {
@@ -1673,9 +1673,9 @@ function setCameraMode(mode, announce = true) {
     camera.rotation.set(0, 0, 0);
     anchor.getWorldScale(cockpitWorldScale);
     camera.position.set(
-      -COCKPIT_LEFT_WORLD / Math.max(Math.abs(cockpitWorldScale.x), .0001),
-      COCKPIT_UP_WORLD / Math.max(Math.abs(cockpitWorldScale.y), .0001),
-      COCKPIT_BACK_WORLD / Math.max(Math.abs(cockpitWorldScale.z), .0001)
+      gameConfig.cockpitCamera.position.x / Math.max(Math.abs(cockpitWorldScale.x), .0001),
+      gameConfig.cockpitCamera.position.y / Math.max(Math.abs(cockpitWorldScale.y), .0001),
+      gameConfig.cockpitCamera.position.z / Math.max(Math.abs(cockpitWorldScale.z), .0001)
     );
     camera.scale.set(
       1 / Math.max(Math.abs(cockpitWorldScale.x), .0001),
@@ -2898,9 +2898,9 @@ function updatePlayer(dt) {
     camera.rotation.set(0, 0, 0);
     cockpitAnchor.getWorldScale(cockpitWorldScale);
     camera.position.set(
-      -COCKPIT_LEFT_WORLD / Math.max(Math.abs(cockpitWorldScale.x), .0001),
-      COCKPIT_UP_WORLD / Math.max(Math.abs(cockpitWorldScale.y), .0001),
-      COCKPIT_BACK_WORLD / Math.max(Math.abs(cockpitWorldScale.z), .0001)
+      gameConfig.cockpitCamera.position.x / Math.max(Math.abs(cockpitWorldScale.x), .0001),
+      gameConfig.cockpitCamera.position.y / Math.max(Math.abs(cockpitWorldScale.y), .0001),
+      gameConfig.cockpitCamera.position.z / Math.max(Math.abs(cockpitWorldScale.z), .0001)
     );
     camera.scale.set(
       1 / Math.max(Math.abs(cockpitWorldScale.x), .0001),
