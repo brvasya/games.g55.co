@@ -260,7 +260,6 @@ const state = {
   shake: 0,
   overtakes: 0,
   nearMisses: 0,
-  elapsedSinceHit: 5,
   lastNearAt: -10,
   draftTime: 0,
   drafting: false,
@@ -1415,7 +1414,6 @@ function armorLevel() { return progressionProfile.upgrades.armor; }
 function maxCarHealth() { return THREE.MathUtils.clamp(armorLevel(), 1, MAX_UPGRADE_LEVEL); }
 function armorCrashSpeedRetention() { return .54 + (armorLevel() - 1) * .035; }
 function armorCrashNitroRetention() { return .62 + (armorLevel() - 1) * .045; }
-function armorHitCooldown() { return 1.05 + (armorLevel() - 1) * .12; }
 function armorCrashSlowTime() { return Math.max(.13, .24 - (armorLevel() - 1) * .022); }
 function upgradeCost(level) { return level >= MAX_UPGRADE_LEVEL ? 0 : level; }
 
@@ -2427,7 +2425,7 @@ function resetGame() {
   state.mode = 'playing';
   state.speed = 96; state.targetSpeed = 96; state.nitro = .72; state.score = 0; state.combo = 1; state.comboHold = 0;
   state.distance = 0; state.time = 0; state.health = maxCarHealth(); state.laneX = 0; state.steer = 0; state.shake = 0;
-  state.overtakes = 0; state.nearMisses = 0; state.elapsedSinceHit = 5; state.lastNearAt = -10;
+  state.overtakes = 0; state.nearMisses = 0; state.lastNearAt = -10;
   state.draftTime = 0; state.drafting = false; state.draftAnnounced = false;
   state.nextEventTime = 17; state.event = null; state.previousEvent = ''; state.densityTimer = 0;
   state.crashSlow = 0; state.endDelay = 0; state.milestones = new Set(); state.zoneIndex = 0; state.announcedZone = -1; state.ended = false; state.visualPrevSpeed = 0; state.boosting = false; state.boostVisual = 0; state.fatalCrash = null;
@@ -2543,7 +2541,6 @@ function resetMenuPreviewState() {
   state.laneX = 0;
   state.boosting = false;
   state.boostVisual = 0;
-  state.elapsedSinceHit = 5;
   state.event = null;
   resetFatalCrashEffects();
 
@@ -2990,7 +2987,6 @@ function collideTraffic(t) {
   state.health--;
   state.shake = .72;
   state.crashSlow = armorCrashSlowTime();
-  state.elapsedSinceHit = 0;
   state.cleanKm = 0;
   state.nextCleanDistance = state.distance + 1000;
   state.highSpeedTime = 0;
@@ -3084,7 +3080,6 @@ function updateFatalCrash(realDt) {
   const slowScale = f.elapsed < 1.85 ? .28 : THREE.MathUtils.lerp(.28, .52, THREE.MathUtils.clamp((f.elapsed - 1.85) / .7, 0, 1));
   const dt = realDt * slowScale;
   state.time += dt;
-  state.elapsedSinceHit += dt;
 
   f.speedKmh *= Math.exp(-.62 * dt);
   f.speedKmh = Math.max(22, f.speedKmh - 8.5 * dt);
@@ -3177,7 +3172,7 @@ function updateFatalCrashCamera(realDt) {
   }
 }
 
-// Keep player/traffic contact physically solid independently of the damage cooldown.
+// Keep player/traffic contact physically solid while the per-car contact guard is active.
 // This prevents a previously-hit wreck from becoming a "ghost" on a second contact.
 function resolvePlayerTrafficOverlap(t, collisionWidth, collisionZ) {
   const signedDx = t.mesh.position.x - player.position.x;
@@ -3458,12 +3453,13 @@ function updateTraffic(dt, worldSpeed) {
     const playerOverlap = Math.abs(dz) < collisionZ && dx < collisionWidth;
 
     if (playerOverlap) {
-      // Damage is edge-triggered per vehicle, but physical separation happens
-      // every frame. During the final cinematic wreck, contacts stay solid and
+      // Each new vehicle contact deals damage immediately; continuous contact
+      // with the same vehicle only deals damage once. Separation happens every
+      // frame. During the final cinematic wreck, contacts stay solid and
       // can launch secondary pileups without consuming additional lives.
       if (state.fatalCrash?.active) {
         if (!t.playerContact) fatalWreckTrafficImpact(t);
-      } else if (!t.playerContact && state.elapsedSinceHit > armorHitCooldown()) {
+      } else if (!t.playerContact) {
         collideTraffic(t);
       }
       t.playerContact = true;
@@ -3839,7 +3835,6 @@ function animate() {
       updateFatalCrash(realDt);
     } else {
       state.time += dt;
-      state.elapsedSinceHit += dt;
       if (state.comboHold > 0) state.comboHold -= dt;
       else state.combo = Math.max(1, state.combo - .18 * dt);
 
